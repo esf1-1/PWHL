@@ -654,15 +654,22 @@ const PWHL_API = "https://lscluster.hockeytech.com/feed/index.php";
 const PWHL_KEY = "446521baf8c38984";
 const PWHL_CLIENT = "pwhl";
 
-// CORS proxy (the PWHL API doesn't allow direct browser requests).
-// Primary: corsproxy.io. Fallback: allorigins.win.
-const PROXY_PRIMARY  = "https://corsproxy.io/?url=";
-const PROXY_FALLBACK = "https://api.allorigins.win/raw?url=";
+// CORS proxies — the PWHL API doesn't allow direct browser requests.
+// We try several in order; whichever responds first wins.
+// allorigins is the most reliable free option; codetabs is a solid backup.
+const PROXIES = [
+  "https://api.allorigins.win/raw?url=",
+  "https://api.codetabs.com/v1/proxy/?quest=",
+  "https://corsproxy.io/?url=",
+];
 
-// The IX hockey RSS feed (Ice Garden). Pulled via rss2json (CORS-friendly).
-// If this feed URL ever changes, edit it here.
-const IX_FEED = "https://www.theixsports.com/the-ice-garden/feed/";
-const RSS2JSON = "https://api.rss2json.com/v1/api.json?rss_url=";
+// The IX feeds we'll try, in order. Main site feed is most likely to exist;
+// if it returns nothing hockey-relevant, we'll try alternates.
+const IX_FEEDS = [
+  "https://www.theixsports.com/category/the-ice-garden/feed/",
+  "https://www.theixsports.com/the-ice-garden/feed/",
+  "https://www.theixsports.com/feed/",
+];
 
 const REFRESH_MS = 60_000;
 
@@ -688,22 +695,36 @@ function colorForTeam(abbr) {
 }
 
 // ====== FETCH HELPERS ======
-async function fetchJSON(url) {
-  // Try primary proxy, then fallback. Returns parsed JSON or throws.
-  const proxies = [PROXY_PRIMARY, PROXY_FALLBACK];
+// Fetch via CORS proxy with a per-attempt timeout. Returns raw text.
+async function fetchViaProxy(url, timeoutMs = 12000) {
   let lastErr;
-  for (const px of proxies) {
+  for (const px of PROXIES) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(px + encodeURIComponent(url), { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      const res = await fetch(px + encodeURIComponent(url), {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) { lastErr = new Error("HTTP " + res.status + " via " + new URL(px).host); continue; }
       const text = await res.text();
-      // HockeyTech sometimes wraps JSON in a callback like `myCb({...})` — strip it
-      const stripped = text.replace(/^[a-zA-Z_$][\w$]*\s*\(/, "").replace(/\);?\s*$/, "");
-      try { return JSON.parse(stripped); }
-      catch { return JSON.parse(text); }
-    } catch (e) { lastErr = e; }
+      if (!text || text.length < 5) { lastErr = new Error("Empty response from " + new URL(px).host); continue; }
+      return text;
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e;
+    }
   }
   throw lastErr || new Error("All proxies failed");
+}
+
+async function fetchJSON(url) {
+  const text = await fetchViaProxy(url);
+  // HockeyTech sometimes wraps JSON in a callback like `myCb({...})` — strip it
+  const stripped = text.replace(/^[a-zA-Z_$][\w$]*\s*\(/, "").replace(/\);?\s*$/, "");
+  try { return JSON.parse(stripped); }
+  catch { return JSON.parse(text); }
 }
 
 function pwhlUrl(params) {
@@ -968,18 +989,50 @@ async function loadTopGoalies() {
 }
 
 // ====== NEWS ======
+// Fetch RSS XML through the CORS proxy and parse with DOMParser (no third-party JSON service).
+// Try multiple feed URLs in case one doesn't exist; prefer hockey-section items.
+function parseRssXml(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+  if (doc.querySelector("parsererror")) throw new Error("RSS XML parse error");
+  const items = Array.from(doc.querySelectorAll("item"));
+  return items.map(it => {
+    const tx = sel => (it.querySelector(sel)?.textContent || "").trim();
+    // dc:creator namespace handling
+    let author = tx("creator") || tx("author") || "";
+    if (!author) {
+      const dc = it.getElementsByTagNameNS("*", "creator")[0];
+      if (dc) author = dc.textContent || "";
+    }
+    return {
+      title:  tx("title"),
+      link:   tx("link"),
+      date:   new Date(tx("pubDate") || tx("date") || Date.now()),
+      author: author.replace(/^by\s+/i, "").trim(),
+      categories: Array.from(it.querySelectorAll("category")).map(c => c.textContent.toLowerCase()),
+    };
+  });
+}
+
 async function loadNews() {
-  const url = RSS2JSON + encodeURIComponent(IX_FEED) + "&count=8";
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error("RSS HTTP " + res.status);
-  const data = await res.json();
-  if (data.status !== "ok") throw new Error("RSS parse failed");
-  return (data.items || []).slice(0, 6).map(it => ({
-    title:  it.title || "",
-    link:   it.link || "",
-    date:   new Date(it.pubDate),
-    author: it.author || "",
-  }));
+  let lastErr;
+  for (const feedUrl of IX_FEEDS) {
+    try {
+      const xml = await fetchViaProxy(feedUrl);
+      const items = parseRssXml(xml);
+      if (!items.length) continue;
+
+      // If we hit the main site feed, prefer hockey-relevant items
+      const hockeyKeywords = ["hockey","pwhl","ice garden","ncaa","frost","fleet","victoire","charge","sirens","sceptres","torrent","goldeneyes"];
+      const isHockey = (it) => {
+        const haystack = (it.title + " " + it.link + " " + it.categories.join(" ")).toLowerCase();
+        return hockeyKeywords.some(k => haystack.includes(k));
+      };
+      const hockey = items.filter(isHockey);
+      const chosen = hockey.length >= 3 ? hockey : items;
+      return chosen.slice(0, 6);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("No feeds reachable");
 }
 
 // ====== RENDER ======
