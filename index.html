@@ -20,8 +20,8 @@
     --text: #f5e9d4;
     --text-strong: #ffffff;
     --muted: #7d7a86;
-    --accent: #e84a23;
-    --accent-glow: #ff6a40;
+    --accent: #7c3aed;       /* PWHL purple */
+    --accent-glow: #a78bfa;   /* lighter purple for hovers / glows */
     --cool: #c9b8ff;
     --win: #6ee7a8;
     --loss: #f87171;
@@ -37,7 +37,7 @@
     line-height: 1.5;
     min-height: 100vh;
     background-image:
-      radial-gradient(circle at 15% -10%, rgba(232,74,35,0.10), transparent 45%),
+      radial-gradient(circle at 15% -10%, rgba(124,58,237,0.12), transparent 45%),
       radial-gradient(circle at 90% 0%, rgba(201,184,255,0.06), transparent 40%);
     background-attachment: fixed;
   }
@@ -54,7 +54,7 @@
     justify-content: space-between;
     gap: 24px;
     flex-wrap: wrap;
-    background: linear-gradient(180deg, rgba(232,74,35,0.04), transparent);
+    background: linear-gradient(180deg, rgba(124,58,237,0.06), transparent);
   }
   .brand { display: flex; flex-direction: column; gap: 2px; }
   .brand .eyebrow {
@@ -144,7 +144,7 @@
   .score-card:hover {
     border-color: var(--accent);
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(232,74,35,0.12);
+    box-shadow: 0 6px 16px rgba(124,58,237,0.18);
   }
   .score-card.live { border-color: var(--accent); }
   .score-card.live::before {
@@ -154,7 +154,7 @@
     font-size: 9px; font-weight: 700;
     letter-spacing: 0.15em;
     color: var(--accent);
-    background: rgba(232,74,35,0.12);
+    background: rgba(124,58,237,0.15);
     padding: 2px 6px; border-radius: 2px;
   }
   .score-card .when {
@@ -264,6 +264,53 @@
   .l5 .dot.otw { background: var(--ot); }
   .l5 .dot.otl { background: #b97a08; color: #fff; }
   .l5 .dot.none { background: var(--border-strong); }
+
+  /* Legend strip below the standings table */
+  .standings-footer {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text);
+  }
+  .legend-title {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 10px;
+    margin-right: 4px;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-item .dot {
+    width: 14px; height: 14px; border-radius: 3px;
+    font-size: 9px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: "JetBrains Mono", monospace;
+    color: #0a0a0c;
+  }
+  .legend-item .dot.w { background: var(--win); }
+  .legend-item .dot.l { background: var(--loss); color: #fff; }
+  .legend-item .dot.otw { background: var(--ot); }
+  .legend-item .dot.otl { background: #b97a08; color: #fff; }
+  .scoring-note {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
 
   .leaders-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 720px) { .leaders-grid { grid-template-columns: 1fr; } }
@@ -426,8 +473,17 @@
           </tbody>
         </table>
       </div>
-      <div class="meta" style="margin-top:10px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.12em;">
-        Scoring: 3 pts regulation win · 2 pts OT/SO win · 1 pt OT/SO loss · 0 pts regulation loss · Top 4 make playoffs (orange line)
+      <div class="standings-footer">
+        <div class="legend">
+          <span class="legend-title">Last 5 legend:</span>
+          <span class="legend-item"><span class="dot w">W</span> Reg. win</span>
+          <span class="legend-item"><span class="dot otw">W</span> OT/SO win</span>
+          <span class="legend-item"><span class="dot otl">L</span> OT/SO loss</span>
+          <span class="legend-item"><span class="dot l">L</span> Reg. loss</span>
+        </div>
+        <div class="scoring-note">
+          Scoring: 3 pts reg. win · 2 pts OT/SO win · 1 pt OT/SO loss · 0 pts reg. loss · Top 4 make playoffs
+        </div>
       </div>
     </section>
 
@@ -619,6 +675,28 @@ function num(v) {
   return isNaN(n) ? 0 : n;
 }
 
+// Parse PWHL API date strings as LOCAL time (not UTC).
+// Strings come in like "2026-05-12" or "2026-05-12 19:00:00" without timezone info.
+// Default JS parsing treats bare YYYY-MM-DD as UTC midnight, which in ET becomes
+// the night BEFORE — that's the "yesterday showing as Monday" bug.
+function parseGameDate(dateStr) {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) {
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4] || 0),
+    Number(m[5] || 0),
+    Number(m[6] || 0),
+  );
+}
+
 // ====== STATUS ======
 function setStatus(state, msg) {
   const pulse = document.getElementById("pulse");
@@ -701,7 +779,7 @@ function computeLast5(scheduleRows) {
     if (!homeAbbr || !awayAbbr) continue;
 
     const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
-    const date = dateStr ? new Date(dateStr.replace(" ", "T")) : new Date(0);
+    const date = parseGameDate(dateStr) || new Date(0);
     const wentOT = /ot|so/i.test(String(period || status)) ||
                    String(pick(g, "overtime","ot","shootout","so") || "").toString() === "1";
     const hN = Number(hg), aN = Number(ag);
@@ -733,7 +811,7 @@ function buildRecentScores(allRows) {
   const games = [];
   for (const g of allRows) {
     const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
-    const d = dateStr ? new Date(dateStr.replace(" ", "T")) : null;
+    const d = parseGameDate(dateStr);
     if (!d || isNaN(d)) continue;
     if (d < since || d > until) continue;
 
@@ -758,7 +836,9 @@ function buildRecentScores(allRows) {
       hg: hg === undefined ? null : Number(hg),
       ag: ag === undefined ? null : Number(ag),
       status, period, wentOT, final,
-      isFuture: d > now && !final && (hg === null || ag === null || (Number(hg) === 0 && Number(ag) === 0)),
+      // Purely time-based: if the game's scheduled start is after now, it hasn't happened.
+      // Don't rely on score being 0/null — once the API fills in scores, the date check holds.
+      isFuture: d > now,
     });
   }
   // Dedupe by game_id in case the same game appears in both reg + playoff feeds
@@ -887,11 +967,15 @@ function renderScores(games) {
     const away = colorForTeam(g.awayAbbr);
     const dateLabel = g.isFuture ? `${fmtDateShort(g.date)} · ${g.date.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}` : fmtDateShort(g.date);
 
-    const isLive = !g.final && !g.isFuture;
-    const status = g.isFuture ? "UPCOMING" : (isLive ? "LIVE" : (g.wentOT ? "FINAL / OT" : "FINAL"));
+    const isFuture = g.isFuture;
+    // Only call it LIVE if the API explicitly says so (or period > 0).
+    // Without this check, scheduled-but-not-yet-played games get falsely marked live.
+    const explicitLive = /live|progress|intermission|period/i.test(g.status) || Number(g.period) > 0;
+    const isLive = !g.final && !isFuture && explicitLive;
+    const status = isFuture ? "UPCOMING" : (isLive ? "LIVE" : (g.wentOT ? "FINAL / OT" : "FINAL"));
     const liveClass = isLive ? "live" : "";
     // Helpful hint that shows on hover so users know what'll happen when they click
-    const hint = g.isFuture ? "PREVIEW →" : (isLive ? "GAME CENTER →" : "BOX SCORE →");
+    const hint = isFuture ? "PREVIEW →" : (isLive ? "GAME CENTER →" : "BOX SCORE →");
 
     // If we have a game ID, the card becomes a real link to the PWHL game center.
     // Same URL works for live games (shows live scoreboard) and finished games (shows box score).
@@ -937,7 +1021,9 @@ function renderStandings(teams, last5Map) {
     const dots = Array.from({length: 5}).map((_, idx) => {
       const r = last5[idx];
       if (!r) return `<span class="dot none"></span>`;
-      return `<span class="dot ${r}">${r === "otw" ? "·" : (r === "otl" ? "·" : (r === "w" ? "W" : "L"))}</span>`;
+      // Every dot shows W or L. Color carries the regulation-vs-OT meaning.
+      const letter = (r === "w" || r === "otw") ? "W" : "L";
+      return `<span class="dot ${r}" title="${r === "w" ? "Regulation win" : r === "l" ? "Regulation loss" : r === "otw" ? "OT/SO win" : "OT/SO loss"}">${letter}</span>`;
     }).join("");
     const playoff = i < 4;
     const cutoff  = i === 3;
