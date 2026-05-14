@@ -681,7 +681,7 @@
             </select>
             <select id="skater-group-filter" class="stat-select compact">
               <option value="">All players</option>
-              <option value="rookies">Rookies only</option>
+              <option value="rookies">Rookies</option>
             </select>
           </div>
           <div id="skaters-list">
@@ -716,7 +716,7 @@
             </select>
             <select id="goalie-group-filter" class="stat-select compact">
               <option value="">All goalies</option>
-              <option value="rookies">Rookies only</option>
+              <option value="rookies">Rookies</option>
             </select>
           </div>
           <div id="goalies-list">
@@ -1452,7 +1452,7 @@ function applyPlayerFilters(players, teamFilter, groupFilter) {
   }
   if (groupFilter === "rookies") {
     out = out.filter(p => p.isRookie);
-    labels.push("rookies only");
+    labels.push("rookies");
   }
   return { players: out, label: labels.join(" · ") };
 }
@@ -1462,8 +1462,9 @@ function renderSkaters(mode) {
   const el = document.getElementById("skaters-list");
   if (!_skaters.length) { el.innerHTML = `<div class="empty">No skater data.</div>`; return; }
 
-  // Per-game stats need a minimum games-played filter to be meaningful
-  const minGP = (["fopct","spg","hpg","toi","shotpct"].includes(_skaterMode)) ? 10 : 1;
+  // Per-game stats need a minimum games-played filter to be meaningful.
+  // Faceoff % is special — only attempts matter, not GP.
+  const minGP = (["spg","hpg","toi","shotpct"].includes(_skaterMode)) ? 10 : 1;
 
   // For each mode: pick the field, the comparison direction, and how to display
   const cfg = {
@@ -1537,7 +1538,7 @@ function renderSkaters(mode) {
   // Stat-specific qualifier notes
   let note = "";
   if (_skaterMode === "fopct") {
-    note = `<div class="qualified-note">Qualified players: minimum <strong>50 faceoff attempts</strong> and <strong>10 games played</strong>.</div>`;
+    note = `<div class="qualified-note">Qualified players: minimum <strong>50 faceoff attempts</strong>.</div>`;
   } else if (_skaterMode === "shotpct") {
     note = `<div class="qualified-note">Qualified players: minimum <strong>25 shots on goal</strong> and <strong>10 games played</strong>.</div>`;
   } else if (["spg","hpg","toi"].includes(_skaterMode)) {
