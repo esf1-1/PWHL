@@ -240,6 +240,19 @@
   }
   table.data tbody tr:hover td { background: rgba(255,255,255,0.02); }
 
+  /* Team-stats table — denser layout for the narrow right column */
+  table.data.team-stats { font-size: 12px; }
+  table.data.team-stats thead th { padding: 6px 4px; font-size: 10px; }
+  table.data.team-stats tbody td { padding: 7px 4px; }
+  table.data.team-stats tbody td.team-col { padding-left: 4px; }
+  .team-abbr-only {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    color: var(--text-strong);
+    letter-spacing: 0.06em;
+    font-size: 12px;
+  }
+
   .team-cell { display: flex; align-items: center; gap: 10px; }
   .team-bar { width: 4px; height: 22px; border-radius: 2px; }
   .team-name { font-weight: 600; color: var(--text-strong); }
@@ -253,11 +266,17 @@
 
   .l5 { display: inline-flex; gap: 3px; justify-content: flex-end; }
   .l5 .dot {
-    width: 14px; height: 14px; border-radius: 3px;
-    font-size: 9px; font-weight: 700;
-    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 14px; height: 14px;
+    padding: 0 3px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: #0a0a0c;
     font-family: "JetBrains Mono", monospace;
+    letter-spacing: -0.02em;
   }
   .l5 .dot.w { background: var(--win); }
   .l5 .dot.l { background: var(--loss); color: #fff; }
@@ -295,11 +314,14 @@
     gap: 5px;
   }
   .legend-item .dot {
-    width: 14px; height: 14px; border-radius: 3px;
+    min-width: 14px; height: 14px;
+    padding: 0 3px;
+    border-radius: 3px;
     font-size: 9px; font-weight: 700;
     display: inline-flex; align-items: center; justify-content: center;
     font-family: "JetBrains Mono", monospace;
     color: #0a0a0c;
+    letter-spacing: -0.02em;
   }
   .legend-item .dot.w { background: var(--win); }
   .legend-item .dot.l { background: var(--loss); color: #fff; }
@@ -427,7 +449,7 @@
 <header class="site">
   <div class="brand">
     <div class="eyebrow">Professional Women's Hockey League</div>
-    <h1 class="display">PWHL<span class="accent">.</span>DASH</h1>
+    <h1 class="display">PWHL<span class="accent">.</span>PORTAL</h1>
     <div class="sub">2025-26 regular season · final standings · league leaders · live news</div>
   </div>
   <div class="status">
@@ -442,7 +464,6 @@
 <section class="scores-strip">
   <div class="section-head">
     <h2><span class="accent-bar"></span>Recent Scores</h2>
-    <div class="meta">Past week + upcoming · click for box score</div>
   </div>
   <div class="scores-scroll" id="scores">
     <div class="score-card"><div class="when skel">DATE</div><div class="score-row"><div class="team"><span class="team-dot skel"></span><span class="skel">Team Name</span></div><div class="score skel">0</div></div><div class="score-row"><div class="team"><span class="team-dot skel"></span><span class="skel">Team Name</span></div><div class="score skel">0</div></div><div class="game-status skel">FINAL</div></div>
@@ -477,8 +498,8 @@
         <div class="legend">
           <span class="legend-title">Last 5 legend:</span>
           <span class="legend-item"><span class="dot w">W</span> Reg. win</span>
-          <span class="legend-item"><span class="dot otw">W</span> OT/SO win</span>
-          <span class="legend-item"><span class="dot otl">L</span> OT/SO loss</span>
+          <span class="legend-item"><span class="dot otw">OT</span> OT/SO win</span>
+          <span class="legend-item"><span class="dot otl">OT</span> OT/SO loss</span>
           <span class="legend-item"><span class="dot l">L</span> Reg. loss</span>
         </div>
         <div class="scoring-note">
@@ -543,6 +564,32 @@
       </div>
       <div id="news-attr" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.14em;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">
         Source: <a href="https://www.theixsports.com/the-ice-garden/" target="_blank" rel="noopener" style="color:var(--cool);">The IX Sports · The Ice Garden</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2><span class="accent-bar"></span>Team Stats</h2>
+        <div class="meta">Regular season</div>
+      </div>
+      <div class="table-wrap">
+        <table class="data team-stats">
+          <thead>
+            <tr>
+              <th class="team-col">Team</th>
+              <th>PP%</th>
+              <th>PK%</th>
+              <th>FO%</th>
+              <th>1-GOAL</th>
+            </tr>
+          </thead>
+          <tbody id="team-stats-body">
+            <tr><td colspan="5" class="empty">Loading team stats…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="meta" style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;">
+        1-goal = record in games decided by one goal (incl. OT/SO)
       </div>
     </section>
   </aside>
@@ -897,6 +944,60 @@ async function loadTopGoalies() {
   })).filter(g => g.name && g.gp > 0);
 }
 
+// ====== TEAM STATS ======
+// Try the HockeyTech teamstats endpoint for PP%/PK%/FO%. If the endpoint isn't
+// available or returns nothing useful, those stats show "—" and we still display
+// the 1-goal record (computed from schedule data).
+async function loadTeamStats() {
+  const url = pwhlUrl({
+    feed: "modulekit",
+    view: "statviewtype",
+    type: "teamstats",
+    season_id: SEASON_ID,
+    site_id: 0, lang: "en", fmt: "json", league_id: 1,
+  });
+  const data = await fetchJSON(url);
+  const rows = extractRows(data, "Statviewtype");
+  return rows.map(r => ({
+    name: pick(r, "name", "team_name", "team_full_name") || "",
+    abbr: pick(r, "team_code", "code", "abbreviation") || "",
+    // Field names vary across HockeyTech installs — try the common ones
+    pp_pct: parseFloat(pick(r, "power_play_percentage", "pp_percentage", "pp_pct", "powerplay_percentage", "ppp") || 0) || 0,
+    pk_pct: parseFloat(pick(r, "penalty_kill_percentage", "pk_percentage", "pk_pct", "penaltykill_percentage") || 0) || 0,
+    fo_pct: parseFloat(pick(r, "faceoff_percentage", "face_off_percentage", "fo_pct", "faceoff_pct") || 0) || 0,
+  })).filter(t => {
+    if (!t.name && !t.abbr) return false;
+    const n = (t.name || "").toLowerCase().replace(/\s+/g,"");
+    return n !== "pwhl" && n !== "league" && n !== "total" && n !== "totals";
+  });
+}
+
+// Returns { teamAbbr: { wins, losses } } counting only games decided by exactly 1 goal.
+// OT/SO games where the final differential is 1 still count.
+function computeOneGoalRecords(scheduleRows) {
+  const byTeam = {};
+  for (const g of scheduleRows) {
+    const homeAbbr = (pick(g, "home_team_code", "home_code", "home_abbr") || "").toString().toUpperCase();
+    const awayAbbr = (pick(g, "visiting_team_code", "away_code", "away_abbr") || "").toString().toUpperCase();
+    const hgRaw = pick(g, "home_goal_count", "home_score", "home_team_goals");
+    const agRaw = pick(g, "visiting_goal_count", "visiting_score", "visiting_team_goals");
+    if (hgRaw === undefined || agRaw === undefined) continue;
+    const hg = Number(hgRaw), ag = Number(agRaw);
+    if (isNaN(hg) || isNaN(ag)) continue;
+    if (hg === 0 && ag === 0) continue; // unplayed
+    const status = (pick(g, "game_status", "status") || "").toString();
+    const final = /final|complete/i.test(status) || status === "3";
+    if (!final) continue;
+    if (Math.abs(hg - ag) !== 1) continue;
+    if (!homeAbbr || !awayAbbr) continue;
+    if (!byTeam[homeAbbr]) byTeam[homeAbbr] = { wins: 0, losses: 0 };
+    if (!byTeam[awayAbbr]) byTeam[awayAbbr] = { wins: 0, losses: 0 };
+    if (hg > ag) { byTeam[homeAbbr].wins++; byTeam[awayAbbr].losses++; }
+    else         { byTeam[homeAbbr].losses++; byTeam[awayAbbr].wins++; }
+  }
+  return byTeam;
+}
+
 // ====== NEWS ======
 function parseRssXml(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, "text/xml");
@@ -1021,9 +1122,10 @@ function renderStandings(teams, last5Map) {
     const dots = Array.from({length: 5}).map((_, idx) => {
       const r = last5[idx];
       if (!r) return `<span class="dot none"></span>`;
-      // Every dot shows W or L. Color carries the regulation-vs-OT meaning.
-      const letter = (r === "w" || r === "otw") ? "W" : "L";
-      return `<span class="dot ${r}" title="${r === "w" ? "Regulation win" : r === "l" ? "Regulation loss" : r === "otw" ? "OT/SO win" : "OT/SO loss"}">${letter}</span>`;
+      // OT outcomes show "OT"; regulation outcomes show W or L. Color carries win-vs-loss.
+      const letter = (r === "otw" || r === "otl") ? "OT" : (r === "w" ? "W" : "L");
+      const title  = r === "w" ? "Regulation win" : r === "l" ? "Regulation loss" : r === "otw" ? "OT/SO win" : "OT/SO loss";
+      return `<span class="dot ${r}" title="${title}">${letter}</span>`;
     }).join("");
     const playoff = i < 4;
     const cutoff  = i === 3;
@@ -1112,6 +1214,46 @@ function renderGoalies(mode) {
   }).join("");
 }
 
+function renderTeamStats(stats, oneGoalMap) {
+  const body = document.getElementById("team-stats-body");
+  // Merge: stats endpoint (PP/PK/FO) + computed 1-goal record.
+  // If the stats endpoint returned nothing, still show a row per team from the 1-goal data.
+  const byAbbr = {};
+  (stats || []).forEach(s => {
+    const k = (s.abbr || "").toUpperCase();
+    if (k) byAbbr[k] = s;
+  });
+  Object.keys(oneGoalMap || {}).forEach(abbr => {
+    if (!byAbbr[abbr]) byAbbr[abbr] = { name: abbr, abbr, pp_pct: 0, pk_pct: 0, fo_pct: 0 };
+  });
+  const all = Object.values(byAbbr);
+  if (!all.length) {
+    body.innerHTML = `<tr><td colspan="5" class="empty">Team stats unavailable.</td></tr>`;
+    return;
+  }
+  all.sort((a,b) => (a.abbr || "").localeCompare(b.abbr || ""));
+  const fmt = v => (v && v > 0) ? v.toFixed(1) : "—";
+  body.innerHTML = all.map(t => {
+    const c = colorForTeam(t.abbr);
+    const og = oneGoalMap[(t.abbr || "").toUpperCase()] || { wins: 0, losses: 0 };
+    const ogStr = (og.wins + og.losses) > 0 ? `${og.wins}-${og.losses}` : "—";
+    return `
+      <tr>
+        <td class="team-col">
+          <div class="team-cell">
+            <span class="team-bar" style="background:${c.bar};height:16px"></span>
+            <span class="team-abbr-only">${t.abbr || ""}</span>
+          </div>
+        </td>
+        <td>${fmt(t.pp_pct)}</td>
+        <td>${fmt(t.pk_pct)}</td>
+        <td>${fmt(t.fo_pct)}</td>
+        <td>${ogStr}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
 function renderNews(items) {
   const el = document.getElementById("news-list");
   if (!items.length) {
@@ -1152,9 +1294,10 @@ async function loadAll() {
     loadTopScorers(),
     loadTopGoalies(),
     loadNews(),
+    loadTeamStats(),
   ]);
 
-  const [stRes, regRes, poRes, sktRes, gRes, newsRes] = results;
+  const [stRes, regRes, poRes, sktRes, gRes, newsRes, tsRes] = results;
   if (regRes.status === "fulfilled") regSchedule = regRes.value; else failures++;
   if (poRes.status  === "fulfilled") poSchedule  = poRes.value;  else failures++;
 
@@ -1169,6 +1312,13 @@ async function loadAll() {
 
   const allGames = [...regSchedule, ...poSchedule];
   renderScores(buildRecentScores(allGames));
+
+  // Team stats: PP%/PK%/FO% from the teamstats endpoint (may fail silently),
+  // plus 1-goal record computed from the schedule we already have.
+  const oneGoalMap = computeOneGoalRecords(regSchedule);
+  const teamStatsData = tsRes.status === "fulfilled" ? tsRes.value : [];
+  if (tsRes.status !== "fulfilled") failures++;
+  renderTeamStats(teamStatsData, oneGoalMap);
 
   if (sktRes.status === "fulfilled") { _skaters = sktRes.value; renderSkaters("points"); }
   else { document.getElementById("skaters-list").innerHTML = `<div class="err">Skater leaders failed: <code>${escapeHtml(sktRes.reason?.message || "")}</code></div>`; failures++; }
@@ -1185,7 +1335,7 @@ async function loadAll() {
 
   setLastUpdated();
   if (failures === 0) setStatus("ok", "Live");
-  else if (failures < 6) setStatus("ok", `Live (partial — ${failures} feed${failures>1?"s":""} unavailable)`);
+  else if (failures < 7) setStatus("ok", `Live (partial — ${failures} feed${failures>1?"s":""} unavailable)`);
   else setStatus("err", "Couldn't reach data sources");
 }
 
