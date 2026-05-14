@@ -577,19 +577,20 @@
           <thead>
             <tr>
               <th class="team-col">Team</th>
-              <th>PP%</th>
-              <th>PK%</th>
-              <th>FO%</th>
+              <th>HOME</th>
+              <th>AWAY</th>
+              <th>STRK</th>
+              <th>GPG</th>
               <th>1-GOAL</th>
             </tr>
           </thead>
           <tbody id="team-stats-body">
-            <tr><td colspan="5" class="empty">Loading team stats…</td></tr>
+            <tr><td colspan="6" class="empty">Loading team stats…</td></tr>
           </tbody>
         </table>
       </div>
-      <div class="meta" style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;">
-        1-goal = record in games decided by one goal (incl. OT/SO)
+      <div class="meta" style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;line-height:1.6;">
+        Home/Away = wins-losses · Strk = current streak (W3 = won last 3) · GPG = goals per game · 1-goal = record in games decided by one goal
       </div>
     </section>
   </aside>
@@ -945,37 +946,13 @@ async function loadTopGoalies() {
 }
 
 // ====== TEAM STATS ======
-// Try the HockeyTech teamstats endpoint for PP%/PK%/FO%. If the endpoint isn't
-// available or returns nothing useful, those stats show "—" and we still display
-// the 1-goal record (computed from schedule data).
-async function loadTeamStats() {
-  const url = pwhlUrl({
-    feed: "modulekit",
-    view: "statviewtype",
-    type: "teamstats",
-    season_id: SEASON_ID,
-    site_id: 0, lang: "en", fmt: "json", league_id: 1,
-  });
-  const data = await fetchJSON(url);
-  const rows = extractRows(data, "Statviewtype");
-  return rows.map(r => ({
-    name: pick(r, "name", "team_name", "team_full_name") || "",
-    abbr: pick(r, "team_code", "code", "abbreviation") || "",
-    // Field names vary across HockeyTech installs — try the common ones
-    pp_pct: parseFloat(pick(r, "power_play_percentage", "pp_percentage", "pp_pct", "powerplay_percentage", "ppp") || 0) || 0,
-    pk_pct: parseFloat(pick(r, "penalty_kill_percentage", "pk_percentage", "pk_pct", "penaltykill_percentage") || 0) || 0,
-    fo_pct: parseFloat(pick(r, "faceoff_percentage", "face_off_percentage", "fo_pct", "faceoff_pct") || 0) || 0,
-  })).filter(t => {
-    if (!t.name && !t.abbr) return false;
-    const n = (t.name || "").toLowerCase().replace(/\s+/g,"");
-    return n !== "pwhl" && n !== "league" && n !== "total" && n !== "totals";
-  });
-}
+// Compute per-team stats from the regular-season schedule we already have.
+// All five columns come from the same source — no extra API call needed.
+// Returns { ABBR: { home: "W-L", away: "W-L", streak: "W3", gpg: 3.2, oneGoal: "8-5" } }
+function computeTeamSchedStats(scheduleRows) {
+  // First pass: collect every finished game for each team
+  const games = {}; // abbr -> [{date, isHome, gf, ga, won, diff}, ...]
 
-// Returns { teamAbbr: { wins, losses } } counting only games decided by exactly 1 goal.
-// OT/SO games where the final differential is 1 still count.
-function computeOneGoalRecords(scheduleRows) {
-  const byTeam = {};
   for (const g of scheduleRows) {
     const homeAbbr = (pick(g, "home_team_code", "home_code", "home_abbr") || "").toString().toUpperCase();
     const awayAbbr = (pick(g, "visiting_team_code", "away_code", "away_abbr") || "").toString().toUpperCase();
@@ -985,17 +962,61 @@ function computeOneGoalRecords(scheduleRows) {
     const hg = Number(hgRaw), ag = Number(agRaw);
     if (isNaN(hg) || isNaN(ag)) continue;
     if (hg === 0 && ag === 0) continue; // unplayed
+
     const status = (pick(g, "game_status", "status") || "").toString();
     const final = /final|complete/i.test(status) || status === "3";
     if (!final) continue;
-    if (Math.abs(hg - ag) !== 1) continue;
     if (!homeAbbr || !awayAbbr) continue;
-    if (!byTeam[homeAbbr]) byTeam[homeAbbr] = { wins: 0, losses: 0 };
-    if (!byTeam[awayAbbr]) byTeam[awayAbbr] = { wins: 0, losses: 0 };
-    if (hg > ag) { byTeam[homeAbbr].wins++; byTeam[awayAbbr].losses++; }
-    else         { byTeam[homeAbbr].losses++; byTeam[awayAbbr].wins++; }
+
+    const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
+    const date = parseGameDate(dateStr) || new Date(0);
+
+    if (!games[homeAbbr]) games[homeAbbr] = [];
+    if (!games[awayAbbr]) games[awayAbbr] = [];
+    games[homeAbbr].push({ date, isHome: true,  gf: hg, ga: ag, won: hg > ag, diff: Math.abs(hg - ag) });
+    games[awayAbbr].push({ date, isHome: false, gf: ag, ga: hg, won: ag > hg, diff: Math.abs(hg - ag) });
   }
-  return byTeam;
+
+  // Second pass: roll up the four stat blocks per team
+  const out = {};
+  for (const abbr of Object.keys(games)) {
+    const list = games[abbr].sort((a,b) => a.date - b.date); // chronological for streak calc
+
+    let homeW = 0, homeL = 0, awayW = 0, awayL = 0;
+    let gf = 0, gp = 0;
+    let oneGW = 0, oneGL = 0;
+    for (const g of list) {
+      gp++;
+      gf += g.gf;
+      if (g.isHome) { if (g.won) homeW++; else homeL++; }
+      else          { if (g.won) awayW++; else awayL++; }
+      if (g.diff === 1) { if (g.won) oneGW++; else oneGL++; }
+    }
+
+    // Streak: walk backwards from most recent game, count consecutive same outcomes
+    let streakCount = 0, streakIsWin = null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (streakIsWin === null) {
+        streakIsWin = list[i].won;
+        streakCount = 1;
+      } else if (list[i].won === streakIsWin) {
+        streakCount++;
+      } else {
+        break;
+      }
+    }
+    const streak = streakCount > 0 ? `${streakIsWin ? "W" : "L"}${streakCount}` : "—";
+
+    out[abbr] = {
+      home: `${homeW}-${homeL}`,
+      away: `${awayW}-${awayL}`,
+      streak,
+      streakIsWin,    // for coloring
+      gpg: gp > 0 ? (gf / gp) : 0,
+      oneGoal: (oneGW + oneGL) > 0 ? `${oneGW}-${oneGL}` : "—",
+    };
+  }
+  return out;
 }
 
 // ====== NEWS ======
@@ -1214,41 +1235,31 @@ function renderGoalies(mode) {
   }).join("");
 }
 
-function renderTeamStats(stats, oneGoalMap) {
+function renderTeamStats(statsMap) {
   const body = document.getElementById("team-stats-body");
-  // Merge: stats endpoint (PP/PK/FO) + computed 1-goal record.
-  // If the stats endpoint returned nothing, still show a row per team from the 1-goal data.
-  const byAbbr = {};
-  (stats || []).forEach(s => {
-    const k = (s.abbr || "").toUpperCase();
-    if (k) byAbbr[k] = s;
-  });
-  Object.keys(oneGoalMap || {}).forEach(abbr => {
-    if (!byAbbr[abbr]) byAbbr[abbr] = { name: abbr, abbr, pp_pct: 0, pk_pct: 0, fo_pct: 0 };
-  });
-  const all = Object.values(byAbbr);
-  if (!all.length) {
-    body.innerHTML = `<tr><td colspan="5" class="empty">Team stats unavailable.</td></tr>`;
+  const teams = Object.keys(statsMap || {}).sort();
+  if (!teams.length) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">No team stats yet — needs played games.</td></tr>`;
     return;
   }
-  all.sort((a,b) => (a.abbr || "").localeCompare(b.abbr || ""));
-  const fmt = v => (v && v > 0) ? v.toFixed(1) : "—";
-  body.innerHTML = all.map(t => {
-    const c = colorForTeam(t.abbr);
-    const og = oneGoalMap[(t.abbr || "").toUpperCase()] || { wins: 0, losses: 0 };
-    const ogStr = (og.wins + og.losses) > 0 ? `${og.wins}-${og.losses}` : "—";
+  body.innerHTML = teams.map(abbr => {
+    const s = statsMap[abbr];
+    const c = colorForTeam(abbr);
+    // Color the streak: green for active winning streaks, red for losing
+    const streakClass = s.streakIsWin === true ? "pos" : s.streakIsWin === false ? "neg" : "";
     return `
       <tr>
         <td class="team-col">
           <div class="team-cell">
             <span class="team-bar" style="background:${c.bar};height:16px"></span>
-            <span class="team-abbr-only">${t.abbr || ""}</span>
+            <span class="team-abbr-only">${abbr}</span>
           </div>
         </td>
-        <td>${fmt(t.pp_pct)}</td>
-        <td>${fmt(t.pk_pct)}</td>
-        <td>${fmt(t.fo_pct)}</td>
-        <td>${ogStr}</td>
+        <td>${s.home}</td>
+        <td>${s.away}</td>
+        <td class="diff ${streakClass}">${s.streak}</td>
+        <td>${s.gpg ? s.gpg.toFixed(2) : "—"}</td>
+        <td>${s.oneGoal}</td>
       </tr>
     `;
   }).join("");
@@ -1294,10 +1305,9 @@ async function loadAll() {
     loadTopScorers(),
     loadTopGoalies(),
     loadNews(),
-    loadTeamStats(),
   ]);
 
-  const [stRes, regRes, poRes, sktRes, gRes, newsRes, tsRes] = results;
+  const [stRes, regRes, poRes, sktRes, gRes, newsRes] = results;
   if (regRes.status === "fulfilled") regSchedule = regRes.value; else failures++;
   if (poRes.status  === "fulfilled") poSchedule  = poRes.value;  else failures++;
 
@@ -1313,12 +1323,9 @@ async function loadAll() {
   const allGames = [...regSchedule, ...poSchedule];
   renderScores(buildRecentScores(allGames));
 
-  // Team stats: PP%/PK%/FO% from the teamstats endpoint (may fail silently),
-  // plus 1-goal record computed from the schedule we already have.
-  const oneGoalMap = computeOneGoalRecords(regSchedule);
-  const teamStatsData = tsRes.status === "fulfilled" ? tsRes.value : [];
-  if (tsRes.status !== "fulfilled") failures++;
-  renderTeamStats(teamStatsData, oneGoalMap);
+  // Team stats — all computed from the regular-season schedule we already pulled.
+  // No extra API call needed.
+  renderTeamStats(computeTeamSchedStats(regSchedule));
 
   if (sktRes.status === "fulfilled") { _skaters = sktRes.value; renderSkaters("points"); }
   else { document.getElementById("skaters-list").innerHTML = `<div class="err">Skater leaders failed: <code>${escapeHtml(sktRes.reason?.message || "")}</code></div>`; failures++; }
@@ -1335,7 +1342,7 @@ async function loadAll() {
 
   setLastUpdated();
   if (failures === 0) setStatus("ok", "Live");
-  else if (failures < 7) setStatus("ok", `Live (partial — ${failures} feed${failures>1?"s":""} unavailable)`);
+  else if (failures < 6) setStatus("ok", `Live (partial — ${failures} feed${failures>1?"s":""} unavailable)`);
   else setStatus("err", "Couldn't reach data sources");
 }
 
