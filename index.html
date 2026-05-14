@@ -407,6 +407,46 @@
     background: rgba(124,58,237,0.08);
   }
 
+  /* Stat selection dropdown */
+  .stat-select {
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    color: var(--text-strong);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .stat-select:hover, .stat-select:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .stat-select option {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  /* Explanation note below qualified leaderboards (goalies, faceoff%) */
+  .qualified-note {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .qualified-note strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
   .news-list { display: flex; flex-direction: column; gap: 0; }
   .news-item {
     padding: 14px 0; border-bottom: 1px solid var(--border);
@@ -543,12 +583,20 @@
       </div>
       <div class="leaders-grid">
         <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
             <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:16px;color:var(--text-strong);letter-spacing:0.06em;text-transform:uppercase;">Skaters</div>
-            <div class="leader-tabs" id="skater-tabs">
-              <button class="active" data-mode="points">Points</button>
-              <button data-mode="goals">Goals</button>
-            </div>
+            <select id="skater-select" class="stat-select">
+              <option value="points">Points</option>
+              <option value="goals">Goals</option>
+              <option value="assists">Assists</option>
+              <option value="ppg">Power-play goals</option>
+              <option value="shg">Short-handed goals</option>
+              <option value="fopct">Faceoff %</option>
+              <option value="spg">Shots / game</option>
+              <option value="hpg">Hits / game</option>
+              <option value="toi">Time on ice / game</option>
+              <option value="plusminus">+/−</option>
+            </select>
           </div>
           <div id="skaters-list">
             <div class="leader-row"><div class="rk skel">1</div><div class="who"><div class="name skel">Player Name</div><div class="team-line skel">Team</div></div><div class="stat skel">00</div></div>
@@ -559,13 +607,14 @@
           </div>
         </div>
         <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
             <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:16px;color:var(--text-strong);letter-spacing:0.06em;text-transform:uppercase;">Goaltenders</div>
-            <div class="leader-tabs" id="goalie-tabs">
-              <button class="active" data-mode="gaa">GAA</button>
-              <button data-mode="svp">SV%</button>
-              <button data-mode="wins">Wins</button>
-            </div>
+            <select id="goalie-select" class="stat-select">
+              <option value="gaa">GAA</option>
+              <option value="svp">SV%</option>
+              <option value="wins">Wins</option>
+              <option value="so">Shutouts</option>
+            </select>
           </div>
           <div id="goalies-list">
             <div class="leader-row"><div class="rk skel">1</div><div class="who"><div class="name skel">Goalie Name</div><div class="team-line skel">Team</div></div><div class="stat skel">0.00</div></div>
@@ -598,19 +647,15 @@
     <section class="panel">
       <div class="section-head">
         <h2><span class="accent-bar"></span>Team Stats</h2>
-        <div class="meta">Regular season</div>
+        <div class="leader-tabs" id="team-stats-tabs">
+          <button class="active" data-mode="record">Record</button>
+          <button data-mode="special">Special Tms</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table class="data team-stats">
-          <thead>
-            <tr>
-              <th class="team-col">Team</th>
-              <th>HOME</th>
-              <th>AWAY</th>
-              <th>STRK</th>
-              <th>GPG</th>
-              <th>1-GOAL</th>
-            </tr>
+          <thead id="team-stats-head">
+            <!-- Header rendered dynamically based on selected tab -->
           </thead>
           <tbody id="team-stats-body">
             <tr><td colspan="6" class="empty">Loading team stats…</td></tr>
@@ -811,6 +856,17 @@ async function loadStandings() {
     gf:      num(pick(r, "goals_for", "gf")),
     ga:      num(pick(r, "goals_against", "ga")),
     diff:    null,
+    // Special-teams + extras — all live in the standings response, contrary to my earlier assumption
+    ppPct:   parseFloat(pick(r, "power_play_pct", "power_play_percentage") || 0) || 0,
+    pkPct:   parseFloat(pick(r, "penalty_kill_pct", "penalty_kill_percentage") || 0) || 0,
+    ppGF:    num(pick(r, "power_play_goals")),
+    ppGA:    num(pick(r, "power_play_goals_against")),
+    shGF:    num(pick(r, "short_handed_goals_for", "shorthanded_goals_for")),
+    shGA:    num(pick(r, "short_handed_goals_against", "shorthanded_goals_against")),
+    pim:     num(pick(r, "penalty_minutes", "pim")),
+    pimPG:   parseFloat(pick(r, "pim_pg", "pim_per_game") || 0) || 0,
+    ppOpps:  num(pick(r, "power_plays", "power_play_opportunities", "pp_opportunities")),
+    timesSH: num(pick(r, "times_short_handed", "times_shorthanded", "pk_opportunities")),
   })).filter(t => {
     // Drop the league total / placeholder row that the API appends at the end.
     // It shows up as "PWHL" with zero games played and no real team data.
@@ -932,22 +988,65 @@ function buildRecentScores(allRows) {
 // ====== PLAYERS / GOALIES ======
 async function loadTopScorers() {
   const url = pwhlUrl({
-    feed: "modulekit", view: "statviewtype", type: "topscorers",
-    first: 0, limit: 50, season_id: SEASON_ID,
+    feed: "modulekit", view: "statviewtype", type: "skaters",
+    first: 0, limit: 200, season_id: SEASON_ID,
     site_id: 0, lang: "en", fmt: "json", league_id: 1,
   });
-  const data = await fetchJSON(url);
+  let data;
+  try {
+    data = await fetchJSON(url);
+  } catch {
+    // Fall back to topscorers if `skaters` isn't supported on this install
+    const url2 = pwhlUrl({
+      feed: "modulekit", view: "statviewtype", type: "topscorers",
+      first: 0, limit: 200, season_id: SEASON_ID,
+      site_id: 0, lang: "en", fmt: "json", league_id: 1,
+    });
+    data = await fetchJSON(url2);
+  }
   const rows = extractRows(data, "Statviewtype");
-  return rows.map(r => ({
-    name: [pick(r, "first_name", "firstname"), pick(r, "last_name", "lastname")].filter(Boolean).join(" ")
-           || pick(r, "player_name", "name") || "",
-    teamAbbr: pick(r, "team_code", "team_abbr", "team", "current_team") || "",
-    teamName: pick(r, "team_name", "team_full_name") || "",
-    gp: num(pick(r, "games_played", "gp")),
-    g:  num(pick(r, "goals", "g")),
-    a:  num(pick(r, "assists", "a")),
-    pts: num(pick(r, "points", "pts")),
-  })).filter(p => p.name);
+
+  // Helpers for parsing time-on-ice strings like "18:24" → 18.4 (decimal minutes)
+  function toiToMin(s) {
+    if (!s) return 0;
+    const str = String(s);
+    if (str.includes(":")) {
+      const [m, sec] = str.split(":").map(Number);
+      return (m || 0) + (sec || 0) / 60;
+    }
+    return parseFloat(str) || 0;
+  }
+
+  return rows.map(r => {
+    const gp = num(pick(r, "games_played", "gp"));
+    const fow = num(pick(r, "faceoff_wins", "fow", "faceoffs_won"));
+    const fol = num(pick(r, "faceoff_losses", "fol", "faceoffs_lost"));
+    const foa = num(pick(r, "faceoff_attempts", "faceoffs_taken", "faceoffs", "fo_attempts")) || (fow + fol);
+    return {
+      name: [pick(r, "first_name", "firstname"), pick(r, "last_name", "lastname")].filter(Boolean).join(" ")
+             || pick(r, "player_name", "name") || "",
+      teamAbbr: pick(r, "team_code", "team_abbr", "team", "current_team") || "",
+      teamName: pick(r, "team_name", "team_full_name") || "",
+      pos: pick(r, "position", "position_code", "pos") || "",
+      gp,
+      g:   num(pick(r, "goals", "g")),
+      a:   num(pick(r, "assists", "a")),
+      pts: num(pick(r, "points", "pts")),
+      ppg: num(pick(r, "power_play_goals", "ppg", "pp_goals", "powerplay_goals")),
+      ppa: num(pick(r, "power_play_assists", "ppa", "pp_assists")),
+      shg: num(pick(r, "short_handed_goals", "shg", "sh_goals", "shorthand_goals", "shorthanded_goals")),
+      sha: num(pick(r, "short_handed_assists", "sha", "sh_assists")),
+      shots: num(pick(r, "shots", "shots_on_goal", "sog")),
+      hits:  num(pick(r, "hits")),
+      pim:   num(pick(r, "penalty_minutes", "pim")),
+      plusMinus: num(pick(r, "plus_minus", "plusminus", "plus_minus_rating")),
+      fow, fol, foa,
+      fopct: foa > 0 ? (fow / foa) * 100 : 0,
+      // Time on ice: per-game (preferred) or total
+      toiPerGame: toiToMin(pick(r, "time_on_ice_avg", "toi_per_game", "toi_avg", "avg_toi")) ||
+                  (gp > 0 ? toiToMin(pick(r, "time_on_ice", "toi", "total_time_on_ice")) / gp : 0),
+    };
+  }).filter(p => p.name);
 }
 
 async function loadTopGoalies() {
@@ -1216,29 +1315,55 @@ let _skaterMode = "points";
 let _goalieMode = "gaa";
 
 function renderSkaters(mode) {
-  // Remember the mode so the "show more" button re-renders with the right one
   if (mode) _skaterMode = mode;
   const el = document.getElementById("skaters-list");
   if (!_skaters.length) { el.innerHTML = `<div class="empty">No skater data.</div>`; return; }
-  const fullSorted = _skaters.slice().sort((a,b) =>
-    _skaterMode === "goals" ? (b.g - a.g || b.pts - a.pts) : (b.pts - a.pts || b.g - a.g)
-  );
+
+  // Per-game stats need a minimum games-played filter to be meaningful
+  const minGP = (["fopct","spg","hpg","toi"].includes(_skaterMode)) ? 10 : 1;
+
+  // For each mode: pick the field, the comparison direction, and how to display
+  const cfg = {
+    points:    { val: p => p.pts, fmt: p => p.pts, sec: p => `${p.g}G ${p.a}A`, label: "PTS" },
+    goals:     { val: p => p.g,   fmt: p => p.g,   sec: p => `${p.pts} pts`,    label: "G" },
+    assists:   { val: p => p.a,   fmt: p => p.a,   sec: p => `${p.pts} pts`,    label: "A" },
+    ppg:       { val: p => p.ppg, fmt: p => p.ppg, sec: p => `${p.g} G total`,  label: "PPG" },
+    shg:       { val: p => p.shg, fmt: p => p.shg, sec: p => `${p.g} G total`,  label: "SHG" },
+    fopct:     { val: p => p.fopct, fmt: p => p.fopct.toFixed(1) + "%", sec: p => `${p.fow}/${p.foa}`, label: "FO%", minTotal: p => p.foa >= 30 },
+    spg:       { val: p => p.gp > 0 ? p.shots / p.gp : 0, fmt: p => (p.gp > 0 ? (p.shots / p.gp).toFixed(2) : "—"), sec: p => `${p.shots} SOG`, label: "S/G" },
+    hpg:       { val: p => p.gp > 0 ? p.hits / p.gp : 0,  fmt: p => (p.gp > 0 ? (p.hits / p.gp).toFixed(2) : "—"),  sec: p => `${p.hits} hits`, label: "HIT/G" },
+    toi:       { val: p => p.toiPerGame, fmt: p => p.toiPerGame > 0 ? minutesToClock(p.toiPerGame) : "—", sec: p => `${p.gp} GP`, label: "TOI/G" },
+    plusminus: { val: p => p.plusMinus, fmt: p => (p.plusMinus > 0 ? "+" : "") + p.plusMinus, sec: p => `${p.g}G ${p.a}A`, label: "+/−" },
+  };
+  const c = cfg[_skaterMode] || cfg.points;
+
+  let pool = _skaters.filter(p => p.gp >= minGP);
+  if (c.minTotal) pool = pool.filter(c.minTotal);
+
+  // If the stat doesn't appear in the feed at all, show a friendly message
+  // (skip this check for plus/minus and assists since 0 is a legitimate value there)
+  const skipDataCheck = ["plusminus", "assists"].includes(_skaterMode);
+  const anyData = skipDataCheck || pool.some(p => c.val(p) > 0);
+  if (!anyData) {
+    el.innerHTML = `<div class="empty">This stat isn't available in the PWHL feed.</div>`;
+    return;
+  }
+
+  const fullSorted = pool.slice().sort((a,b) => c.val(b) - c.val(a) || b.pts - a.pts);
   const shown = fullSorted.slice(0, _skaterLimit);
   const rows = shown.map((p, i) => {
-    const c = colorForTeam(p.teamAbbr);
-    const stat = _skaterMode === "goals" ? p.g : p.pts;
-    const sec  = _skaterMode === "goals" ? `${p.pts} pts` : `${p.g}G ${p.a}A`;
+    const col = colorForTeam(p.teamAbbr);
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
         <div class="who">
           <div class="name">${p.name}</div>
           <div class="team-line">
-            <span class="team-bar" style="background:${c.bar};width:3px;height:10px;border-radius:1px;"></span>
+            <span class="team-bar" style="background:${col.bar};width:3px;height:10px;border-radius:1px;"></span>
             ${p.teamAbbr || p.teamName || ""} · ${p.gp} GP
           </div>
         </div>
-        <div class="stat">${stat}<span class="secondary">${sec}</span></div>
+        <div class="stat">${c.fmt(p)}<span class="secondary">${c.sec(p)}</span></div>
       </div>
     `;
   }).join("");
@@ -1253,23 +1378,35 @@ function renderSkaters(mode) {
   el.innerHTML = rows + controls;
 }
 
+// Format decimal minutes (e.g. 18.4) as MM:SS for time-on-ice display
+function minutesToClock(min) {
+  if (!min || min <= 0) return "—";
+  const m = Math.floor(min);
+  const s = Math.round((min - m) * 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function renderGoalies(mode) {
   if (mode) _goalieMode = mode;
   const el = document.getElementById("goalies-list");
   if (!_goalies.length) { el.innerHTML = `<div class="empty">No goalie data.</div>`; return; }
-  const pool = (_goalieMode === "wins" ? _goalies : _goalies.filter(g => g.gp >= 8));
+  // For rate stats (GAA, SV%), require enough games played to qualify
+  const isRateStat = (_goalieMode === "gaa" || _goalieMode === "svp");
+  const pool = isRateStat ? _goalies.filter(g => g.gp >= 12) : _goalies;
   const fullSorted = pool.slice().sort((a,b) => {
-    if (_goalieMode === "wins") return b.w - a.w;
+    if (_goalieMode === "wins") return b.w - a.w || (b.gp - a.gp);
+    if (_goalieMode === "so")   return b.so - a.so || (b.svp - a.svp);
     if (_goalieMode === "svp")  return b.svp - a.svp;
-    return a.gaa - b.gaa;
+    return a.gaa - b.gaa; // GAA: lower is better
   });
   const shown = fullSorted.slice(0, _goalieLimit);
   const rows = shown.map((g, i) => {
     const c = colorForTeam(g.teamAbbr);
     let stat = "", sec = "";
-    if (_goalieMode === "wins") { stat = g.w; sec = `${g.gp} GP · ${g.so} SO`; }
+    if (_goalieMode === "wins")    { stat = g.w; sec = `${g.gp} GP · ${g.so} SO`; }
+    else if (_goalieMode === "so") { stat = g.so; sec = `${g.gp} GP · ${g.w}W`; }
     else if (_goalieMode === "svp") { stat = (g.svp ? g.svp.toFixed(3).replace(/^0/,"") : "—"); sec = `${g.gp} GP`; }
-    else { stat = g.gaa ? g.gaa.toFixed(2) : "—"; sec = `${g.gp} GP · ${g.w}W`; }
+    else                            { stat = g.gaa ? g.gaa.toFixed(2) : "—"; sec = `${g.gp} GP · ${g.w}W`; }
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
@@ -1292,7 +1429,13 @@ function renderGoalies(mode) {
       ${canCollapse ? `<button type="button" data-action="reset" data-target="goalies">Show top 10</button>` : ""}
     </div>
   ` : "";
-  el.innerHTML = rows + controls;
+  // Show "qualified" explanation only for rate stats
+  const qualifiedNote = isRateStat ? `
+    <div class="qualified-note">
+      Qualified goaltenders: minimum 12 games played for GAA and SV% leaderboards. Switch to <strong>Wins</strong> or <strong>Shutouts</strong> to see all goaltenders.
+    </div>
+  ` : "";
+  el.innerHTML = rows + controls + qualifiedNote;
 }
 
 // One delegated click handler for both Show more / Show top 10 buttons
@@ -1312,34 +1455,98 @@ document.addEventListener("click", e => {
   }
 });
 
-function renderTeamStats(statsMap) {
+let _teamStatsMode = "record";
+let _teamSched = null;
+let _teamStandings = null;
+
+function renderTeamStats(schedMap, standingsList) {
+  if (schedMap) _teamSched = schedMap;
+  if (standingsList) _teamStandings = standingsList;
+  const head = document.getElementById("team-stats-head");
   const body = document.getElementById("team-stats-body");
-  const teams = Object.keys(statsMap || {}).sort();
+
+  // Build a unified by-abbr map
+  const byAbbr = {};
+  Object.keys(_teamSched || {}).forEach(abbr => {
+    byAbbr[abbr] = { abbr, ...(_teamSched[abbr] || {}) };
+  });
+  (_teamStandings || []).forEach(t => {
+    const abbr = (t.abbr || "").toUpperCase();
+    if (!abbr) return;
+    byAbbr[abbr] = { ...(byAbbr[abbr] || { abbr }), ...t, abbr };
+  });
+
+  const teams = Object.values(byAbbr).sort((a,b) => (a.abbr || "").localeCompare(b.abbr || ""));
+
   if (!teams.length) {
-    body.innerHTML = `<tr><td colspan="6" class="empty">No team stats yet — needs played games.</td></tr>`;
+    head.innerHTML = "";
+    body.innerHTML = `<tr><td class="empty">No team stats yet.</td></tr>`;
     return;
   }
-  body.innerHTML = teams.map(abbr => {
-    const s = statsMap[abbr];
-    const c = colorForTeam(abbr);
-    // Color the streak: green for active winning streaks, red for losing
-    const streakClass = s.streakIsWin === true ? "pos" : s.streakIsWin === false ? "neg" : "";
-    return `
+
+  if (_teamStatsMode === "special") {
+    // Special teams view: PP% / PK% / PIM-pg / PP goals / SH goals
+    head.innerHTML = `
       <tr>
-        <td class="team-col">
-          <div class="team-cell">
-            <span class="team-bar" style="background:${c.bar};height:16px"></span>
-            <span class="team-abbr-only">${abbr}</span>
-          </div>
-        </td>
-        <td>${s.home}</td>
-        <td>${s.away}</td>
-        <td class="diff ${streakClass}">${s.streak}</td>
-        <td>${s.gpg ? s.gpg.toFixed(2) : "—"}</td>
-        <td>${s.oneGoal}</td>
+        <th class="team-col">Team</th>
+        <th>PP%</th>
+        <th>PK%</th>
+        <th>PIM/G</th>
+        <th>PPG</th>
+        <th>SHG</th>
       </tr>
     `;
-  }).join("");
+    body.innerHTML = teams.map(t => {
+      const c = colorForTeam(t.abbr);
+      const fmt = v => (v && Number(v) > 0) ? Number(v).toFixed(1) : "—";
+      return `
+        <tr>
+          <td class="team-col">
+            <div class="team-cell">
+              <span class="team-bar" style="background:${c.bar};height:16px"></span>
+              <span class="team-abbr-only">${t.abbr || ""}</span>
+            </div>
+          </td>
+          <td>${fmt(t.ppPct)}</td>
+          <td>${fmt(t.pkPct)}</td>
+          <td>${fmt(t.pimPG)}</td>
+          <td>${t.ppGF != null ? t.ppGF : "—"}</td>
+          <td>${t.shGF != null ? t.shGF : "—"}</td>
+        </tr>
+      `;
+    }).join("");
+  } else {
+    // Default record view
+    head.innerHTML = `
+      <tr>
+        <th class="team-col">Team</th>
+        <th>HOME</th>
+        <th>AWAY</th>
+        <th>STRK</th>
+        <th>GPG</th>
+        <th>1-GOAL</th>
+      </tr>
+    `;
+    body.innerHTML = teams.map(t => {
+      const c = colorForTeam(t.abbr);
+      const streakClass = t.streakIsWin === true ? "pos" : t.streakIsWin === false ? "neg" : "";
+      return `
+        <tr>
+          <td class="team-col">
+            <div class="team-cell">
+              <span class="team-bar" style="background:${c.bar};height:16px"></span>
+              <span class="team-abbr-only">${t.abbr || ""}</span>
+            </div>
+          </td>
+          <td>${t.home || "—"}</td>
+          <td>${t.away || "—"}</td>
+          <td class="diff ${streakClass}">${t.streak || "—"}</td>
+          <td>${t.gpg ? t.gpg.toFixed(2) : "—"}</td>
+          <td>${t.oneGoal || "—"}</td>
+        </tr>
+      `;
+    }).join("");
+  }
 }
 
 function renderNews(items) {
@@ -1368,8 +1575,17 @@ function wireTabs(rootId, onChange, resetFn) {
     onChange(b.dataset.mode);
   });
 }
-wireTabs("skater-tabs", renderSkaters, () => { _skaterLimit = 10; });
-wireTabs("goalie-tabs", renderGoalies, () => { _goalieLimit = 10; });
+function wireSelect(selectId, onChange, resetFn) {
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  el.addEventListener("change", e => {
+    if (resetFn) resetFn();
+    onChange(e.target.value);
+  });
+}
+wireSelect("skater-select", renderSkaters, () => { _skaterLimit = 10; });
+wireSelect("goalie-select", renderGoalies, () => { _goalieLimit = 10; });
+wireTabs("team-stats-tabs", (mode) => { _teamStatsMode = mode; renderTeamStats(); });
 
 async function loadAll() {
   setStatus("ok", "Refreshing live data…");
@@ -1403,7 +1619,10 @@ async function loadAll() {
 
   // Team stats — all computed from the regular-season schedule we already pulled.
   // No extra API call needed.
-  renderTeamStats(computeTeamSchedStats(regSchedule));
+  // Team stats — schedule-derived (home/away/streak/gpg/1-goal) + standings-derived (PP%/PK%/PIM-pg)
+  const schedStats = computeTeamSchedStats(regSchedule);
+  const standingsTeams = stRes.status === "fulfilled" ? stRes.value : [];
+  renderTeamStats(schedStats, standingsTeams);
 
   if (sktRes.status === "fulfilled") { _skaters = sktRes.value; renderSkaters("points"); }
   else { document.getElementById("skaters-list").innerHTML = `<div class="err">Skater leaders failed: <code>${escapeHtml(sktRes.reason?.message || "")}</code></div>`; failures++; }
