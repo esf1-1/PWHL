@@ -987,8 +987,10 @@ function buildRecentScores(allRows) {
 
 // ====== PLAYERS / GOALIES ======
 async function loadTopScorers() {
+  // type=topscorers returns league-wide players. (type=skaters is per-team-roster
+  // and was inadvertently returning a single team's players for some sort orders.)
   const url = pwhlUrl({
-    feed: "modulekit", view: "statviewtype", type: "skaters",
+    feed: "modulekit", view: "statviewtype", type: "topscorers",
     first: 0, limit: 200, season_id: SEASON_ID,
     site_id: 0, lang: "en", fmt: "json", league_id: 1,
   });
@@ -996,15 +998,35 @@ async function loadTopScorers() {
   try {
     data = await fetchJSON(url);
   } catch {
-    // Fall back to topscorers if `skaters` isn't supported on this install
+    // Fall back to skaters if topscorers fails for any reason
     const url2 = pwhlUrl({
-      feed: "modulekit", view: "statviewtype", type: "topscorers",
+      feed: "modulekit", view: "statviewtype", type: "skaters",
       first: 0, limit: 200, season_id: SEASON_ID,
       site_id: 0, lang: "en", fmt: "json", league_id: 1,
     });
     data = await fetchJSON(url2);
   }
   const rows = extractRows(data, "Statviewtype");
+
+  // === DEBUG (one-time on first load) ===
+  // Helps us see what the API actually returns vs. what we expect.
+  // Open DevTools console and look for the "PWHL skater debug" output.
+  if (!window._loggedSkaterDebug) {
+    window._loggedSkaterDebug = true;
+    console.group("PWHL skater debug");
+    console.log("Total players returned:", rows.length);
+    if (rows.length) {
+      const teams = {};
+      rows.forEach(r => {
+        const t = (r.team_code || r.team || r.team_abbr || "?").toString();
+        teams[t] = (teams[t] || 0) + 1;
+      });
+      console.log("Players per team:", teams);
+      console.log("All fields in first player record:", Object.keys(rows[0]).sort());
+      console.log("First player full record:", rows[0]);
+    }
+    console.groupEnd();
+  }
 
   // Helpers for parsing time-on-ice strings like "18:24" → 18.4 (decimal minutes)
   function toiToMin(s) {
@@ -1392,7 +1414,7 @@ function renderGoalies(mode) {
   if (!_goalies.length) { el.innerHTML = `<div class="empty">No goalie data.</div>`; return; }
   // For rate stats (GAA, SV%), require enough games played to qualify
   const isRateStat = (_goalieMode === "gaa" || _goalieMode === "svp");
-  const pool = isRateStat ? _goalies.filter(g => g.gp >= 12) : _goalies;
+  const pool = isRateStat ? _goalies.filter(g => g.gp >= 5) : _goalies;
   const fullSorted = pool.slice().sort((a,b) => {
     if (_goalieMode === "wins") return b.w - a.w || (b.gp - a.gp);
     if (_goalieMode === "so")   return b.so - a.so || (b.svp - a.svp);
@@ -1432,7 +1454,7 @@ function renderGoalies(mode) {
   // Show "qualified" explanation only for rate stats
   const qualifiedNote = isRateStat ? `
     <div class="qualified-note">
-      Qualified goaltenders: minimum 12 games played for GAA and SV% leaderboards. Switch to <strong>Wins</strong> or <strong>Shutouts</strong> to see all goaltenders.
+      Qualified goaltenders: minimum 5 games played for GAA and SV% leaderboards. Switch to <strong>Wins</strong> or <strong>Shutouts</strong> to see all goaltenders.
     </div>
   ` : "";
   el.innerHTML = rows + controls + qualifiedNote;
