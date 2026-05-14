@@ -379,6 +379,34 @@
     background: var(--accent); color: #0a0a0c; font-weight: 700;
   }
 
+  /* Show more / Show top 10 buttons under each leader list */
+  .show-more {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .show-more button {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .show-more button:hover {
+    border-color: var(--accent);
+    color: var(--text-strong);
+    background: rgba(124,58,237,0.08);
+  }
+
   .news-list { display: flex; flex-direction: column; gap: 0; }
   .news-item {
     padding: 14px 0; border-bottom: 1px solid var(--border);
@@ -477,7 +505,7 @@
     <section class="panel">
       <div class="section-head">
         <h2><span class="accent-bar"></span>Standings</h2>
-        <div class="meta">2025-26 regular season · final</div>
+        <div class="meta">2025-26 regular season</div>
       </div>
       <div class="table-wrap">
         <table class="data" id="standings-table">
@@ -588,9 +616,6 @@
             <tr><td colspan="6" class="empty">Loading team stats…</td></tr>
           </tbody>
         </table>
-      </div>
-      <div class="meta" style="margin-top:10px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;line-height:1.6;">
-        Home/Away = wins-losses · Strk = current streak (W3 = won last 3) · GPG = goals per game · 1-goal = record in games decided by one goal
       </div>
     </section>
   </aside>
@@ -884,9 +909,12 @@ function buildRecentScores(allRows) {
       hg: hg === undefined ? null : Number(hg),
       ag: ag === undefined ? null : Number(ag),
       status, period, wentOT, final,
-      // Purely time-based: if the game's scheduled start is after now, it hasn't happened.
-      // Don't rely on score being 0/null — once the API fills in scores, the date check holds.
-      isFuture: d > now,
+      // A game is "future" if either:
+      //   1. Its scheduled start is after now, OR
+      //   2. It's scheduled for today but hasn't been played (no final, no score yet)
+      // The second clause handles the case where the API stores only the date (midnight),
+      // making a 7 PM game look "past" by morning — but it clearly hasn't happened yet.
+      isFuture: d > now || (!final && Number(hg) === 0 && Number(ag) === 0 && d.toDateString() === now.toDateString()),
     });
   }
   // Dedupe by game_id in case the same game appears in both reg + playoff feeds
@@ -1090,14 +1118,19 @@ function renderScores(games) {
     const dateLabel = g.isFuture ? `${fmtDateShort(g.date)} · ${g.date.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}` : fmtDateShort(g.date);
 
     const isFuture = g.isFuture;
-    // Only call it LIVE if the API explicitly says so (or period > 0).
-    // Without this check, scheduled-but-not-yet-played games get falsely marked live.
-    const explicitLive = /live|progress|intermission|period/i.test(g.status) || Number(g.period) > 0;
-    const isLive = !g.final && !isFuture && explicitLive;
-    const status = isFuture ? "UPCOMING" : (isLive ? "LIVE" : (g.wentOT ? "FINAL / OT" : "FINAL"));
+    // Require strong evidence that the game is actually being played:
+    //   - API explicitly says live/in progress/intermission, OR
+    //   - period field is a meaningful in-game value (not blank, "0", or "1" without other signals)
+    //   - AND there's a non-null score (a truly unplayed game shows 0-0 with no period)
+    // Without the score check, scheduled-today games get falsely flagged as live the moment
+    // midnight passes, since the schedule only stores the date, not the start time.
+    const liveText = /live|progress|intermission/i.test(g.status);
+    const hasGameplay = (Number(g.hg) > 0 || Number(g.ag) > 0);
+    const isLive = !g.final && !isFuture && liveText && hasGameplay;
+    const status = isFuture ? "UPCOMING" : (isLive ? "LIVE" : (g.wentOT ? "FINAL / OT" : (g.final ? "FINAL" : "SCHEDULED")));
     const liveClass = isLive ? "live" : "";
     // Helpful hint that shows on hover so users know what'll happen when they click
-    const hint = isFuture ? "PREVIEW →" : (isLive ? "GAME CENTER →" : "BOX SCORE →");
+    const hint = isFuture ? "PREVIEW →" : (isLive ? "GAME CENTER →" : (g.final ? "BOX SCORE →" : "GAME CENTER →"));
 
     // If we have a game ID, the card becomes a real link to the PWHL game center.
     // Same URL works for live games (shows live scoreboard) and finished games (shows box score).
@@ -1177,17 +1210,24 @@ function renderStandings(teams, last5Map) {
 
 let _skaters = [];
 let _goalies = [];
+let _skaterLimit = 10;
+let _goalieLimit = 10;
+let _skaterMode = "points";
+let _goalieMode = "gaa";
 
 function renderSkaters(mode) {
+  // Remember the mode so the "show more" button re-renders with the right one
+  if (mode) _skaterMode = mode;
   const el = document.getElementById("skaters-list");
   if (!_skaters.length) { el.innerHTML = `<div class="empty">No skater data.</div>`; return; }
-  const sorted = _skaters.slice().sort((a,b) =>
-    mode === "goals" ? (b.g - a.g || b.pts - a.pts) : (b.pts - a.pts || b.g - a.g)
-  ).slice(0, 8);
-  el.innerHTML = sorted.map((p, i) => {
+  const fullSorted = _skaters.slice().sort((a,b) =>
+    _skaterMode === "goals" ? (b.g - a.g || b.pts - a.pts) : (b.pts - a.pts || b.g - a.g)
+  );
+  const shown = fullSorted.slice(0, _skaterLimit);
+  const rows = shown.map((p, i) => {
     const c = colorForTeam(p.teamAbbr);
-    const stat = mode === "goals" ? p.g : p.pts;
-    const sec  = mode === "goals" ? `${p.pts} pts` : `${p.g}G ${p.a}A`;
+    const stat = _skaterMode === "goals" ? p.g : p.pts;
+    const sec  = _skaterMode === "goals" ? `${p.pts} pts` : `${p.g}G ${p.a}A`;
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
@@ -1202,22 +1242,33 @@ function renderSkaters(mode) {
       </div>
     `;
   }).join("");
+  const hasMore = fullSorted.length > _skaterLimit;
+  const canCollapse = _skaterLimit > 10;
+  const controls = (hasMore || canCollapse) ? `
+    <div class="show-more">
+      ${hasMore ? `<button type="button" data-action="more" data-target="skaters">Show 5 more</button>` : ""}
+      ${canCollapse ? `<button type="button" data-action="reset" data-target="skaters">Show top 10</button>` : ""}
+    </div>
+  ` : "";
+  el.innerHTML = rows + controls;
 }
 
 function renderGoalies(mode) {
+  if (mode) _goalieMode = mode;
   const el = document.getElementById("goalies-list");
   if (!_goalies.length) { el.innerHTML = `<div class="empty">No goalie data.</div>`; return; }
-  const pool = (mode === "wins" ? _goalies : _goalies.filter(g => g.gp >= 8));
-  const sorted = pool.slice().sort((a,b) => {
-    if (mode === "wins") return b.w - a.w;
-    if (mode === "svp")  return b.svp - a.svp;
+  const pool = (_goalieMode === "wins" ? _goalies : _goalies.filter(g => g.gp >= 8));
+  const fullSorted = pool.slice().sort((a,b) => {
+    if (_goalieMode === "wins") return b.w - a.w;
+    if (_goalieMode === "svp")  return b.svp - a.svp;
     return a.gaa - b.gaa;
-  }).slice(0, 8);
-  el.innerHTML = sorted.map((g, i) => {
+  });
+  const shown = fullSorted.slice(0, _goalieLimit);
+  const rows = shown.map((g, i) => {
     const c = colorForTeam(g.teamAbbr);
     let stat = "", sec = "";
-    if (mode === "wins") { stat = g.w; sec = `${g.gp} GP · ${g.so} SO`; }
-    else if (mode === "svp") { stat = (g.svp ? g.svp.toFixed(3).replace(/^0/,"") : "—"); sec = `${g.gp} GP`; }
+    if (_goalieMode === "wins") { stat = g.w; sec = `${g.gp} GP · ${g.so} SO`; }
+    else if (_goalieMode === "svp") { stat = (g.svp ? g.svp.toFixed(3).replace(/^0/,"") : "—"); sec = `${g.gp} GP`; }
     else { stat = g.gaa ? g.gaa.toFixed(2) : "—"; sec = `${g.gp} GP · ${g.w}W`; }
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
@@ -1233,7 +1284,33 @@ function renderGoalies(mode) {
       </div>
     `;
   }).join("");
+  const hasMore = fullSorted.length > _goalieLimit;
+  const canCollapse = _goalieLimit > 10;
+  const controls = (hasMore || canCollapse) ? `
+    <div class="show-more">
+      ${hasMore ? `<button type="button" data-action="more" data-target="goalies">Show 5 more</button>` : ""}
+      ${canCollapse ? `<button type="button" data-action="reset" data-target="goalies">Show top 10</button>` : ""}
+    </div>
+  ` : "";
+  el.innerHTML = rows + controls;
 }
+
+// One delegated click handler for both Show more / Show top 10 buttons
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-action]");
+  if (!b) return;
+  const action = b.dataset.action;
+  const target = b.dataset.target;
+  if (target === "skaters") {
+    if (action === "more")  _skaterLimit += 5;
+    if (action === "reset") _skaterLimit = 10;
+    renderSkaters();
+  } else if (target === "goalies") {
+    if (action === "more")  _goalieLimit += 5;
+    if (action === "reset") _goalieLimit = 10;
+    renderGoalies();
+  }
+});
 
 function renderTeamStats(statsMap) {
   const body = document.getElementById("team-stats-body");
@@ -1280,18 +1357,19 @@ function renderNews(items) {
   `).join("");
 }
 
-function wireTabs(rootId, onChange) {
+function wireTabs(rootId, onChange, resetFn) {
   const root = document.getElementById(rootId);
   root.addEventListener("click", e => {
     const b = e.target.closest("button");
     if (!b) return;
     root.querySelectorAll("button").forEach(x => x.classList.remove("active"));
     b.classList.add("active");
+    if (resetFn) resetFn();
     onChange(b.dataset.mode);
   });
 }
-wireTabs("skater-tabs", renderSkaters);
-wireTabs("goalie-tabs", renderGoalies);
+wireTabs("skater-tabs", renderSkaters, () => { _skaterLimit = 10; });
+wireTabs("goalie-tabs", renderGoalies, () => { _goalieLimit = 10; });
 
 async function loadAll() {
   setStatus("ok", "Refreshing live data…");
