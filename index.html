@@ -989,10 +989,13 @@ const PWHL_CLIENT = "pwhl";
 // post-game box scores — the PWHL site renders different content based on game state.
 const PWHL_GAME_URL = (gameId) => `https://www.thepwhl.com/en/stats/game-center/${gameId}`;
 
+// CORS proxies — the PWHL API doesn't allow direct browser requests.
+// Codetabs first (most reliable), then corsproxy.io. allorigins was first
+// but has been failing CORS + timing out, so we keep it as a last resort only.
 const PROXIES = [
-  "https://api.allorigins.win/raw?url=",
   "https://api.codetabs.com/v1/proxy/?quest=",
   "https://corsproxy.io/?url=",
+  "https://api.allorigins.win/raw?url=",
 ];
 
 const IX_FEEDS = [
@@ -2250,42 +2253,20 @@ async function loadGameSummary(gameId) {
 }
 
 async function loadPlayByPlay(gameId) {
-  // HockeyTech installs use different view names for play-by-play. We try several
-  // candidates and use the first one that returns real data (not an error).
-  // If you find another working view name, prepend it to this list.
-  const VIEW_CANDIDATES = [
-    "gameCenterPlayByPlay",
-    "gamecenterPlayByPlay",
-    "play_by_play",
-    "gameSummary",
-    "gameCenterPreview",
-    "previewSummary",
-    "boxscore",
-  ];
-  let lastErr = null;
-  for (const view of VIEW_CANDIDATES) {
-    const url = pwhlUrl({
-      feed: "statviewfeed",
-      view,
-      game_id: gameId,
-      site_id: 0, lang: "en", fmt: "json", league_id: 1,
-    });
-    try {
-      const data = await fetchJSON(url);
-      // If the API returns { error: "InvalidView..." }, try the next one
-      if (data && data.error && /invalidview|unknown/i.test(data.error)) {
-        lastErr = data.error;
-        continue;
-      }
-      console.log(`[shotmap] Got data from view='${view}'`);
-      // Tag the response with which view worked so debugging is easier later
-      data.__view = view;
-      return data;
-    } catch (e) {
-      lastErr = e.message;
-    }
-  }
-  throw new Error("No working play-by-play view found. Last error: " + (lastErr || "unknown"));
+  // Per Isabelle Lefebvre's PWHL Data Reference, the real play-by-play endpoint
+  // uses feed=gc&tab=pxpverbose (NOT feed=statviewfeed). Long-form pxpverbose
+  // includes every shot event with X/Y coordinates; short-form pxp is summarized.
+  const url = pwhlUrl({
+    feed: "gc",
+    tab: "pxpverbose",
+    game_id: gameId,
+    key: PWHL_KEY,
+    client_code: PWHL_CLIENT,
+  });
+  const data = await fetchJSON(url);
+  // Tag which endpoint we used (helpful for debugging if we ever change it)
+  if (data && typeof data === "object") data.__endpoint = "gc/pxpverbose";
+  return data;
 }
 
 // Walk the response recursively looking for objects that look like shot events.
