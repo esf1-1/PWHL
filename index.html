@@ -1097,21 +1097,35 @@ function num(v) {
 // Strings come in like "2026-05-12" or "2026-05-12 19:00:00" without timezone info.
 // Default JS parsing treats bare YYYY-MM-DD as UTC midnight, which in ET becomes
 // the night BEFORE — that's the "yesterday showing as Monday" bug.
-function parseGameDate(dateStr) {
+// Optional `timeStr` arg lets callers merge a separate "HH:MM:SS" or "HH:MM" time
+// (the schedule API splits date and start time into different fields for upcoming games).
+function parseGameDate(dateStr, timeStr) {
   if (!dateStr) return null;
   const s = String(dateStr).trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  // Try matching YYYY-MM-DD with optional time embedded
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
   if (!m) {
     const d = new Date(s);
     return isNaN(d) ? null : d;
+  }
+  let hours = Number(m[4] || 0);
+  let mins  = Number(m[5] || 0);
+  let secs  = Number(m[6] || 0);
+  // If a separate time was provided AND the date string didn't already have one, use it
+  if (timeStr && !m[4]) {
+    const t = String(timeStr).trim();
+    const tm = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (tm) {
+      hours = Number(tm[1]);
+      mins  = Number(tm[2]);
+      secs  = Number(tm[3] || 0);
+    }
   }
   return new Date(
     Number(m[1]),
     Number(m[2]) - 1,
     Number(m[3]),
-    Number(m[4] || 0),
-    Number(m[5] || 0),
-    Number(m[6] || 0),
+    hours, mins, secs,
   );
 }
 
@@ -1238,9 +1252,24 @@ function buildRecentScores(allRows) {
   const until = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
 
   const games = [];
+  // DEBUG: log a sample game once so we can see what time-related fields actually exist
+  if (!window._loggedScheduleDebug && allRows.length) {
+    window._loggedScheduleDebug = true;
+    const sample = allRows.find(g => {
+      const status = (pick(g, "game_status", "status") || "").toString();
+      return !/final|complete/i.test(status); // pick an unplayed game where time fields are most relevant
+    }) || allRows[0];
+    console.group("PWHL schedule debug — sample game");
+    console.log("All fields:", Object.keys(sample).sort());
+    console.log("Full record:", sample);
+    console.groupEnd();
+  }
   for (const g of allRows) {
     const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
-    const d = parseGameDate(dateStr);
+    // The schedule API stores start time in a separate field for upcoming games.
+    // Try multiple likely names so games show their real ET start time instead of midnight.
+    const timeStr = pick(g, "scheduled_time", "start_time", "game_time", "start_time_str", "time") || "";
+    const d = parseGameDate(dateStr, timeStr);
     if (!d || isNaN(d)) continue;
     if (d < since || d > until) continue;
 
@@ -2221,14 +2250,42 @@ async function loadGameSummary(gameId) {
 }
 
 async function loadPlayByPlay(gameId) {
-  // The play-by-play feed has every event including shots with X/Y coordinates.
-  const url = pwhlUrl({
-    feed: "statviewfeed",
-    view: "playByPlay",
-    game_id: gameId,
-    site_id: 0, lang: "en", fmt: "json", league_id: 1,
-  });
-  return await fetchJSON(url);
+  // HockeyTech installs use different view names for play-by-play. We try several
+  // candidates and use the first one that returns real data (not an error).
+  // If you find another working view name, prepend it to this list.
+  const VIEW_CANDIDATES = [
+    "gameCenterPlayByPlay",
+    "gamecenterPlayByPlay",
+    "play_by_play",
+    "gameSummary",
+    "gameCenterPreview",
+    "previewSummary",
+    "boxscore",
+  ];
+  let lastErr = null;
+  for (const view of VIEW_CANDIDATES) {
+    const url = pwhlUrl({
+      feed: "statviewfeed",
+      view,
+      game_id: gameId,
+      site_id: 0, lang: "en", fmt: "json", league_id: 1,
+    });
+    try {
+      const data = await fetchJSON(url);
+      // If the API returns { error: "InvalidView..." }, try the next one
+      if (data && data.error && /invalidview|unknown/i.test(data.error)) {
+        lastErr = data.error;
+        continue;
+      }
+      console.log(`[shotmap] Got data from view='${view}'`);
+      // Tag the response with which view worked so debugging is easier later
+      data.__view = view;
+      return data;
+    } catch (e) {
+      lastErr = e.message;
+    }
+  }
+  throw new Error("No working play-by-play view found. Last error: " + (lastErr || "unknown"));
 }
 
 // Walk the response recursively looking for objects that look like shot events.
