@@ -426,9 +426,88 @@
     border-color: var(--accent);
     outline: none;
   }
+  .stat-select.compact {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
   .stat-select option {
     background: var(--surface);
     color: var(--text);
+  }
+
+  /* Leader header + filter rows */
+  .leader-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .leader-title {
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--text-strong);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .filter-row .stat-select { flex: 1; min-width: 110px; }
+
+  /* Sortable table headers */
+  table.data thead th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  table.data thead th.sortable:hover { color: var(--text-strong); }
+  table.data thead th.sortable.sorted { color: var(--accent); }
+  table.data thead th.sortable .arrow {
+    display: inline-block;
+    margin-left: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-size: 9px;
+  }
+  table.data thead th.sortable.sorted .arrow { opacity: 1; }
+
+  /* Player badges (rookie, FA) shown next to the name in leaderboards */
+  .badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-left: 6px;
+    vertical-align: 1px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .badge.rookie {
+    background: rgba(110,231,168,0.15);
+    color: var(--win);
+    border: 1px solid rgba(110,231,168,0.3);
+  }
+  .badge.fa-ufa {
+    background: rgba(124,58,237,0.18);
+    color: var(--accent-glow);
+    border: 1px solid rgba(124,58,237,0.4);
+  }
+  .badge.fa-rfa {
+    background: rgba(251,191,36,0.15);
+    color: var(--ot);
+    border: 1px solid rgba(251,191,36,0.35);
+  }
+  .badge.fa-expires {
+    background: rgba(248,113,113,0.12);
+    color: var(--loss);
+    border: 1px solid rgba(248,113,113,0.3);
   }
 
   /* Explanation note below qualified leaderboards (goalies, faceoff%) */
@@ -583,20 +662,44 @@
       </div>
       <div class="leaders-grid">
         <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
-            <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:16px;color:var(--text-strong);letter-spacing:0.06em;text-transform:uppercase;">Skaters</div>
+          <div class="leader-controls">
+            <div class="leader-title">Skaters</div>
             <select id="skater-select" class="stat-select">
               <option value="points">Points</option>
               <option value="goals">Goals</option>
               <option value="assists">Assists</option>
               <option value="ppg">Power-play goals</option>
               <option value="shg">Short-handed goals</option>
+              <option value="gwg">Game-winning goals</option>
+              <option value="otg">Overtime goals</option>
               <option value="fopct">Faceoff %</option>
               <option value="spg">Shots / game</option>
-              <option value="hpg">Hits / game</option>
-              <option value="toi">Time on ice / game</option>
               <option value="shotpct">Shooting %</option>
+              <option value="hits">Hits</option>
+              <option value="hpg">Hits / game</option>
+              <option value="blocks">Blocked shots</option>
+              <option value="toi">Time on ice / game</option>
               <option value="plusminus">+/−</option>
+            </select>
+          </div>
+          <div class="filter-row">
+            <select id="skater-team-filter" class="stat-select compact">
+              <option value="">All teams</option>
+              <option value="BOS">Boston</option>
+              <option value="MIN">Minnesota</option>
+              <option value="MTL">Montréal</option>
+              <option value="NY">New York</option>
+              <option value="OTT">Ottawa</option>
+              <option value="SEA">Seattle</option>
+              <option value="TOR">Toronto</option>
+              <option value="VAN">Vancouver</option>
+            </select>
+            <select id="skater-group-filter" class="stat-select compact">
+              <option value="">All players</option>
+              <option value="rookies">Rookies only</option>
+              <option value="ufa">UFAs this summer</option>
+              <option value="rfa">RFAs this summer</option>
+              <option value="anyfa">Any pending FA</option>
             </select>
           </div>
           <div id="skaters-list">
@@ -608,13 +711,33 @@
           </div>
         </div>
         <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
-            <div style="font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:16px;color:var(--text-strong);letter-spacing:0.06em;text-transform:uppercase;">Goaltenders</div>
+          <div class="leader-controls">
+            <div class="leader-title">Goaltenders</div>
             <select id="goalie-select" class="stat-select">
               <option value="gaa">GAA</option>
               <option value="svp">SV%</option>
               <option value="wins">Wins</option>
               <option value="so">Shutouts</option>
+            </select>
+          </div>
+          <div class="filter-row">
+            <select id="goalie-team-filter" class="stat-select compact">
+              <option value="">All teams</option>
+              <option value="BOS">Boston</option>
+              <option value="MIN">Minnesota</option>
+              <option value="MTL">Montréal</option>
+              <option value="NY">New York</option>
+              <option value="OTT">Ottawa</option>
+              <option value="SEA">Seattle</option>
+              <option value="TOR">Toronto</option>
+              <option value="VAN">Vancouver</option>
+            </select>
+            <select id="goalie-group-filter" class="stat-select compact">
+              <option value="">All goalies</option>
+              <option value="rookies">Rookies only</option>
+              <option value="ufa">UFAs this summer</option>
+              <option value="rfa">RFAs this summer</option>
+              <option value="anyfa">Any pending FA</option>
             </select>
           </div>
           <div id="goalies-list">
@@ -685,6 +808,57 @@ const PLAYOFF_SEASON_ID = 9;
 const PWHL_API = "https://lscluster.hockeytech.com/feed/index.php";
 const PWHL_KEY = "446521baf8c38984";
 const PWHL_CLIENT = "pwhl";
+
+// ====== PENDING FREE AGENTS (Summer 2026) ======
+// Sourced from The Ice Garden's PWHL Master Spreadsheet (search "PWHL Master Spreadsheet"
+// on theicegarden.com). Update as players re-sign over the summer.
+//
+// Status: "UFA" (unrestricted) | "RFA" (restricted) | "EXPIRES" (rights expire)
+// Names use the API format "Last, First" or "First Last" — both work, we normalize when matching.
+//
+// Currently populated for Toronto only (other 7 teams' tabs need manual entry).
+// Anyone not listed here is treated as signed.
+const PENDING_FAS = {
+  // === TOR ===
+  "Nurse, Sarah": "UFA",
+  "Gardiner, Jenn": "UFA",
+  "Rosenthal, Gabby": "UFA",
+  "Daniel, Izzy": "UFA",
+  "McMahon, Mannon": "UFA",
+  "Meixner, Anna": "UFA",
+  "Chan, Katie": "UFA",
+  "Lappan, Darcie": "UFA",
+  "Schneider, Malia": "UFA",
+  "Thompson, Claire": "UFA",
+  "Channell-Watkins, Mellissa": "UFA",
+  "Bard, Sydney": "UFA",
+  "Karjalainen, Sini": "UFA",
+  "Campbell, Kristen": "UFA",
+  "Newell, Kimberly": "UFA",
+  "Karvinen, Michelle": "RFA",
+  "Samoskevich, Madison": "RFA",
+  "Shokhina, Anna": "RFA",
+  "Bassi, Chanreet": "RFA",
+  "Brooks, Brianna": "RFA",
+  // === Add other teams here as you collect them ===
+};
+
+// Build a lookup that handles both "Last, First" and "First Last" formats
+const _faLookup = {};
+Object.keys(PENDING_FAS).forEach(key => {
+  // Original "Last, First"
+  _faLookup[key.toLowerCase()] = PENDING_FAS[key];
+  // Flipped "First Last"
+  if (key.includes(",")) {
+    const [last, first] = key.split(",").map(s => s.trim());
+    _faLookup[`${first} ${last}`.toLowerCase()] = PENDING_FAS[key];
+  }
+});
+
+function getFAStatus(playerName) {
+  if (!playerName) return null;
+  return _faLookup[playerName.toLowerCase()] || null;
+}
 
 // Where clicking a game card sends you. The same URL handles live games AND
 // post-game box scores — the PWHL site renders different content based on game state.
@@ -1028,12 +1202,15 @@ async function loadTopScorers() {
     const foa = num(pick(r, "faceoff_attempts"));
     // 'shots' = actual shots on goal (NOT 'shots_on', which is always 0 in PWHL data — confirmed via live response)
     const shotsOn = num(pick(r, "shots"));
+    const name = [pick(r, "first_name"), pick(r, "last_name")].filter(Boolean).join(" ")
+                 || pick(r, "name") || "";
     return {
-      name: [pick(r, "first_name"), pick(r, "last_name")].filter(Boolean).join(" ")
-             || pick(r, "name") || "",
+      name,
       teamAbbr: pick(r, "team_code") || "",
       teamName: pick(r, "team_name") || "",
       pos: pick(r, "position") || "",
+      isRookie: String(pick(r, "rookie") || "0") === "1",
+      faStatus: getFAStatus(name),  // null if not a pending FA
       gp,
       g:   num(pick(r, "goals")),
       a:   num(pick(r, "assists")),
@@ -1047,6 +1224,11 @@ async function loadTopScorers() {
       pim:   num(pick(r, "penalty_minutes")),
       plusMinus: num(pick(r, "plus_minus")),
       shotPct: parseFloat(pick(r, "shooting_percentage") || 0) || 0,
+      // Bonus stats confirmed real in the live response
+      blocks: num(pick(r, "shots_blocked_by_player")),
+      gwg:    num(pick(r, "game_winning_goals")),
+      otg:    num(pick(r, "overtime_goals")),
+      eng:    num(pick(r, "empty_net_goals")),
       // Faceoffs: prefer pre-computed pct, fall back to manual calc
       fow,
       foa,
@@ -1067,19 +1249,24 @@ async function loadTopGoalies() {
   });
   const data = await fetchJSON(url);
   const rows = extractRows(data, "Statviewtype");
-  return rows.map(r => ({
-    name: [pick(r, "first_name", "firstname"), pick(r, "last_name", "lastname")].filter(Boolean).join(" ")
-           || pick(r, "player_name", "name") || "",
-    teamAbbr: pick(r, "team_code", "team_abbr", "team") || "",
-    teamName: pick(r, "team_name", "team_full_name") || "",
-    gp: num(pick(r, "games_played", "gp")),
-    w:  num(pick(r, "wins", "w")),
-    l:  num(pick(r, "losses", "l")),
-    gaa: parseFloat(pick(r, "goals_against_average", "gaa") || 0) || 0,
-    svp: parseFloat(pick(r, "save_percentage", "save_pct", "svp") || 0) || 0,
-    so:  num(pick(r, "shutouts", "so")),
-    mins: pick(r, "minutes_played", "mins") || "",
-  })).filter(g => g.name && g.gp > 0);
+  return rows.map(r => {
+    const name = [pick(r, "first_name", "firstname"), pick(r, "last_name", "lastname")].filter(Boolean).join(" ")
+                 || pick(r, "player_name", "name") || "";
+    return {
+      name,
+      teamAbbr: pick(r, "team_code", "team_abbr", "team") || "",
+      teamName: pick(r, "team_name", "team_full_name") || "",
+      isRookie: String(pick(r, "rookie") || "0") === "1",
+      faStatus: getFAStatus(name),
+      gp: num(pick(r, "games_played", "gp")),
+      w:  num(pick(r, "wins", "w")),
+      l:  num(pick(r, "losses", "l")),
+      gaa: parseFloat(pick(r, "goals_against_average", "gaa") || 0) || 0,
+      svp: parseFloat(pick(r, "save_percentage", "save_pct", "svp") || 0) || 0,
+      so:  num(pick(r, "shutouts", "so")),
+      mins: pick(r, "minutes_played", "mins") || "",
+    };
+  }).filter(g => g.name && g.gp > 0);
 }
 
 // ====== TEAM STATS ======
@@ -1323,6 +1510,35 @@ let _skaterLimit = 10;
 let _goalieLimit = 10;
 let _skaterMode = "points";
 let _goalieMode = "gaa";
+let _skaterTeamFilter = "";
+let _skaterGroupFilter = "";
+let _goalieTeamFilter = "";
+let _goalieGroupFilter = "";
+
+// Apply team/group filters to a player list. Returns the filtered subset
+// plus a human-readable description of what's being shown (for the empty state).
+function applyPlayerFilters(players, teamFilter, groupFilter) {
+  let out = players.slice();
+  const labels = [];
+  if (teamFilter) {
+    out = out.filter(p => (p.teamAbbr || "").toUpperCase() === teamFilter);
+    labels.push(teamFilter);
+  }
+  if (groupFilter === "rookies") {
+    out = out.filter(p => p.isRookie);
+    labels.push("rookies only");
+  } else if (groupFilter === "ufa") {
+    out = out.filter(p => p.faStatus === "UFA");
+    labels.push("UFAs");
+  } else if (groupFilter === "rfa") {
+    out = out.filter(p => p.faStatus === "RFA");
+    labels.push("RFAs");
+  } else if (groupFilter === "anyfa") {
+    out = out.filter(p => p.faStatus); // UFA, RFA, or EXPIRES
+    labels.push("pending FAs");
+  }
+  return { players: out, label: labels.join(" · ") };
+}
 
 function renderSkaters(mode) {
   if (mode) _skaterMode = mode;
@@ -1339,17 +1555,29 @@ function renderSkaters(mode) {
     assists:   { val: p => p.a,   fmt: p => p.a,   sec: p => `${p.pts} pts`,    label: "A" },
     ppg:       { val: p => p.ppg, fmt: p => p.ppg, sec: p => `${p.g} G total`,  label: "PPG" },
     shg:       { val: p => p.shg, fmt: p => p.shg, sec: p => `${p.g} G total`,  label: "SHG" },
+    gwg:       { val: p => p.gwg, fmt: p => p.gwg, sec: p => `${p.g} G total`,  label: "GWG" },
+    otg:       { val: p => p.otg, fmt: p => p.otg, sec: p => `${p.g} G total`,  label: "OTG" },
     fopct:     { val: p => p.fopct, fmt: p => p.fopct.toFixed(1) + "%", sec: p => `${p.fow}/${p.foa}`, label: "FO%", minTotal: p => p.foa >= 30 },
     spg:       { val: p => p.gp > 0 ? p.shots / p.gp : 0, fmt: p => (p.gp > 0 ? (p.shots / p.gp).toFixed(2) : "—"), sec: p => `${p.shots} SOG`, label: "S/G" },
-    hpg:       { val: p => p.hitsPerGame, fmt: p => p.hitsPerGame.toFixed(2), sec: p => `${p.hits} hits`, label: "HIT/G" },
-    toi:       { val: p => p.toiPerGame, fmt: p => p.toiPerGame > 0 ? minutesToClock(p.toiPerGame) : "—", sec: p => `${p.gp} GP`, label: "TOI/G" },
     shotpct:   { val: p => p.shotPct, fmt: p => p.shotPct.toFixed(1) + "%", sec: p => `${p.g}G / ${p.shots} SOG`, label: "SH%", minTotal: p => p.shots >= 25 },
+    hits:      { val: p => p.hits, fmt: p => p.hits, sec: p => `${p.hitsPerGame.toFixed(2)}/G`, label: "HITS" },
+    hpg:       { val: p => p.hitsPerGame, fmt: p => p.hitsPerGame.toFixed(2), sec: p => `${p.hits} hits`, label: "HIT/G" },
+    blocks:    { val: p => p.blocks, fmt: p => p.blocks, sec: p => `${p.gp} GP`, label: "BLK" },
+    toi:       { val: p => p.toiPerGame, fmt: p => p.toiPerGame > 0 ? minutesToClock(p.toiPerGame) : "—", sec: p => `${p.gp} GP`, label: "TOI/G" },
     plusminus: { val: p => p.plusMinus, fmt: p => (p.plusMinus > 0 ? "+" : "") + p.plusMinus, sec: p => `${p.g}G ${p.a}A`, label: "+/−" },
   };
   const c = cfg[_skaterMode] || cfg.points;
 
-  let pool = _skaters.filter(p => p.gp >= minGP);
+  // Apply user filters first (team + group), then per-stat qualifications
+  const filtered = applyPlayerFilters(_skaters, _skaterTeamFilter, _skaterGroupFilter);
+  let pool = filtered.players.filter(p => p.gp >= minGP);
   if (c.minTotal) pool = pool.filter(c.minTotal);
+
+  // If filters wiped everything out, show a specific empty message
+  if (!pool.length) {
+    el.innerHTML = `<div class="empty">No skaters match the filter${filtered.label ? ` (${filtered.label})` : ""}.</div>`;
+    return;
+  }
 
   // If the stat doesn't appear in the feed at all, show a friendly message
   // (skip this check for plus/minus and assists since 0 is a legitimate value there)
@@ -1364,11 +1592,14 @@ function renderSkaters(mode) {
   const shown = fullSorted.slice(0, _skaterLimit);
   const rows = shown.map((p, i) => {
     const col = colorForTeam(p.teamAbbr);
+    const badges = [];
+    if (p.isRookie) badges.push(`<span class="badge rookie" title="Rookie">R</span>`);
+    if (p.faStatus) badges.push(`<span class="badge fa-${p.faStatus.toLowerCase()}" title="${p.faStatus === "UFA" ? "Unrestricted Free Agent (2026)" : p.faStatus === "RFA" ? "Restricted Free Agent (2026)" : "Rights expiring"}">${p.faStatus}</span>`);
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
         <div class="who">
-          <div class="name">${p.name}</div>
+          <div class="name">${p.name}${badges.length ? ' ' + badges.join('') : ''}</div>
           <div class="team-line">
             <span class="team-bar" style="background:${col.bar};width:3px;height:10px;border-radius:1px;"></span>
             ${p.teamAbbr || p.teamName || ""} · ${p.gp} GP
@@ -1403,7 +1634,16 @@ function renderGoalies(mode) {
   if (!_goalies.length) { el.innerHTML = `<div class="empty">No goalie data.</div>`; return; }
   // For rate stats (GAA, SV%), require enough games played to qualify
   const isRateStat = (_goalieMode === "gaa" || _goalieMode === "svp");
-  const pool = isRateStat ? _goalies.filter(g => g.gp >= 5) : _goalies;
+  let pool = isRateStat ? _goalies.filter(g => g.gp >= 5) : _goalies.slice();
+
+  // Apply user filters (team + group)
+  const filtered = applyPlayerFilters(pool, _goalieTeamFilter, _goalieGroupFilter);
+  pool = filtered.players;
+  if (!pool.length) {
+    el.innerHTML = `<div class="empty">No goaltenders match the filter${filtered.label ? ` (${filtered.label})` : ""}.</div>`;
+    return;
+  }
+
   const fullSorted = pool.slice().sort((a,b) => {
     if (_goalieMode === "wins") return b.w - a.w || (b.gp - a.gp);
     if (_goalieMode === "so")   return b.so - a.so || (b.svp - a.svp);
@@ -1418,11 +1658,14 @@ function renderGoalies(mode) {
     else if (_goalieMode === "so") { stat = g.so; sec = `${g.gp} GP · ${g.w}W`; }
     else if (_goalieMode === "svp") { stat = (g.svp ? g.svp.toFixed(3).replace(/^0/,"") : "—"); sec = `${g.gp} GP`; }
     else                            { stat = g.gaa ? g.gaa.toFixed(2) : "—"; sec = `${g.gp} GP · ${g.w}W`; }
+    const badges = [];
+    if (g.isRookie) badges.push(`<span class="badge rookie" title="Rookie">R</span>`);
+    if (g.faStatus) badges.push(`<span class="badge fa-${g.faStatus.toLowerCase()}" title="${g.faStatus === "UFA" ? "Unrestricted Free Agent (2026)" : g.faStatus === "RFA" ? "Restricted Free Agent (2026)" : "Rights expiring"}">${g.faStatus}</span>`);
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
         <div class="who">
-          <div class="name">${g.name}</div>
+          <div class="name">${g.name}${badges.length ? ' ' + badges.join('') : ''}</div>
           <div class="team-line">
             <span class="team-bar" style="background:${c.bar};width:3px;height:10px;border-radius:1px;"></span>
             ${g.teamAbbr || g.teamName || ""}
@@ -1469,6 +1712,44 @@ document.addEventListener("click", e => {
 let _teamStatsMode = "record";
 let _teamSched = null;
 let _teamStandings = null;
+let _teamSortKey = "abbr";       // current sort column
+let _teamSortDir = 1;            // 1 = asc, -1 = desc
+
+// Column definitions: key (field name), label (header text), align,
+// dir (default sort direction: 1=asc, -1=desc), val (how to extract sortable value)
+const TEAM_STAT_COLUMNS = {
+  record: [
+    { key: "abbr",    label: "Team",   align: "left",  dir:  1, val: t => t.abbr || "" },
+    { key: "home",    label: "HOME",   align: "right", dir: -1, val: t => parseRecordWins(t.home) },
+    { key: "away",    label: "AWAY",   align: "right", dir: -1, val: t => parseRecordWins(t.away) },
+    { key: "strk",    label: "STRK",   align: "right", dir: -1, val: t => streakSortValue(t) },
+    { key: "gpg",     label: "GPG",    align: "right", dir: -1, val: t => t.gpg || 0 },
+    { key: "oneGoal", label: "1-GOAL", align: "right", dir: -1, val: t => parseRecordWins(t.oneGoal) },
+  ],
+  special: [
+    { key: "abbr",  label: "Team",   align: "left",  dir:  1, val: t => t.abbr || "" },
+    { key: "ppPct", label: "PP%",    align: "right", dir: -1, val: t => Number(t.ppPct) || 0 },
+    { key: "pkPct", label: "PK%",    align: "right", dir: -1, val: t => Number(t.pkPct) || 0 },
+    { key: "pimPG", label: "PIM/G",  align: "right", dir:  1, val: t => Number(t.pimPG) || 0 },
+    { key: "ppGF",  label: "PPG",    align: "right", dir: -1, val: t => Number(t.ppGF)  || 0 },
+    { key: "shGF",  label: "SHG",    align: "right", dir: -1, val: t => Number(t.shGF)  || 0 },
+  ],
+};
+
+// Parse "12-3" → 12 (use wins as the sort proxy for record columns)
+function parseRecordWins(rec) {
+  if (!rec || rec === "—") return -1;
+  const m = String(rec).match(/^(\d+)-(\d+)/);
+  return m ? Number(m[1]) : -1;
+}
+// Turn streak strings like "W3" / "L2" / "—" into a sortable number
+// (W3 = +3, L2 = -2, dash = 0). Positive sorts before negative when descending.
+function streakSortValue(t) {
+  if (!t.streak || t.streak === "—") return 0;
+  const m = t.streak.match(/^([WL])(\d+)/);
+  if (!m) return 0;
+  return (m[1] === "W" ? 1 : -1) * Number(m[2]);
+}
 
 function renderTeamStats(schedMap, standingsList) {
   if (schedMap) _teamSched = schedMap;
@@ -1476,7 +1757,7 @@ function renderTeamStats(schedMap, standingsList) {
   const head = document.getElementById("team-stats-head");
   const body = document.getElementById("team-stats-body");
 
-  // Build a unified by-abbr map
+  // Build a unified by-abbr map merging schedule + standings data
   const byAbbr = {};
   Object.keys(_teamSched || {}).forEach(abbr => {
     byAbbr[abbr] = { abbr, ...(_teamSched[abbr] || {}) };
@@ -1487,26 +1768,37 @@ function renderTeamStats(schedMap, standingsList) {
     byAbbr[abbr] = { ...(byAbbr[abbr] || { abbr }), ...t, abbr };
   });
 
-  const teams = Object.values(byAbbr).sort((a,b) => (a.abbr || "").localeCompare(b.abbr || ""));
-
+  const teams = Object.values(byAbbr);
   if (!teams.length) {
     head.innerHTML = "";
     body.innerHTML = `<tr><td class="empty">No team stats yet.</td></tr>`;
     return;
   }
 
+  const cols = TEAM_STAT_COLUMNS[_teamStatsMode] || TEAM_STAT_COLUMNS.record;
+  const sortCol = cols.find(c => c.key === _teamSortKey) || cols[0];
+
+  // Sort
+  teams.sort((a,b) => {
+    const av = sortCol.val(a), bv = sortCol.val(b);
+    if (typeof av === "string") return _teamSortDir * av.localeCompare(bv);
+    return _teamSortDir * (av - bv);
+  });
+
+  // Render header (clickable)
+  head.innerHTML = `
+    <tr>
+      ${cols.map(c => {
+        const sorted = c.key === _teamSortKey;
+        const arrow = sorted ? (_teamSortDir > 0 ? "▲" : "▼") : "";
+        const cls = ["sortable", c.align === "left" ? "team-col" : "", sorted ? "sorted" : ""].filter(Boolean).join(" ");
+        return `<th class="${cls}" data-sort-key="${c.key}" data-default-dir="${c.dir}">${c.label}<span class="arrow">${arrow}</span></th>`;
+      }).join("")}
+    </tr>
+  `;
+
+  // Render rows based on current mode
   if (_teamStatsMode === "special") {
-    // Special teams view: PP% / PK% / PIM-pg / PP goals / SH goals
-    head.innerHTML = `
-      <tr>
-        <th class="team-col">Team</th>
-        <th>PP%</th>
-        <th>PK%</th>
-        <th>PIM/G</th>
-        <th>PPG</th>
-        <th>SHG</th>
-      </tr>
-    `;
     body.innerHTML = teams.map(t => {
       const c = colorForTeam(t.abbr);
       const fmt = v => (v && Number(v) > 0) ? Number(v).toFixed(1) : "—";
@@ -1527,17 +1819,6 @@ function renderTeamStats(schedMap, standingsList) {
       `;
     }).join("");
   } else {
-    // Default record view
-    head.innerHTML = `
-      <tr>
-        <th class="team-col">Team</th>
-        <th>HOME</th>
-        <th>AWAY</th>
-        <th>STRK</th>
-        <th>GPG</th>
-        <th>1-GOAL</th>
-      </tr>
-    `;
     body.innerHTML = teams.map(t => {
       const c = colorForTeam(t.abbr);
       const streakClass = t.streakIsWin === true ? "pos" : t.streakIsWin === false ? "neg" : "";
@@ -1559,6 +1840,25 @@ function renderTeamStats(schedMap, standingsList) {
     }).join("");
   }
 }
+
+// Delegated click handler for sortable team-stats headers
+document.addEventListener("click", e => {
+  const th = e.target.closest("th.sortable");
+  if (!th) return;
+  const key = th.dataset.sortKey;
+  const defaultDir = Number(th.dataset.defaultDir) || -1;
+  if (_teamSortKey === key) {
+    // Same column clicked: flip direction
+    _teamSortDir *= -1;
+  } else {
+    _teamSortKey = key;
+    _teamSortDir = defaultDir;
+  }
+  renderTeamStats();
+});
+
+// Reset sort to default when the user changes tabs
+const _origTeamTabHandler = (mode) => { _teamStatsMode = mode; _teamSortKey = "abbr"; _teamSortDir = 1; renderTeamStats(); };
 
 function renderNews(items) {
   const el = document.getElementById("news-list");
@@ -1596,7 +1896,21 @@ function wireSelect(selectId, onChange, resetFn) {
 }
 wireSelect("skater-select", renderSkaters, () => { _skaterLimit = 10; });
 wireSelect("goalie-select", renderGoalies, () => { _goalieLimit = 10; });
-wireTabs("team-stats-tabs", (mode) => { _teamStatsMode = mode; renderTeamStats(); });
+wireTabs("team-stats-tabs", _origTeamTabHandler);
+
+// Filter dropdowns (reset list to top 10 on every change)
+document.getElementById("skater-team-filter").addEventListener("change", e => {
+  _skaterTeamFilter = e.target.value; _skaterLimit = 10; renderSkaters();
+});
+document.getElementById("skater-group-filter").addEventListener("change", e => {
+  _skaterGroupFilter = e.target.value; _skaterLimit = 10; renderSkaters();
+});
+document.getElementById("goalie-team-filter").addEventListener("change", e => {
+  _goalieTeamFilter = e.target.value; _goalieLimit = 10; renderGoalies();
+});
+document.getElementById("goalie-group-filter").addEventListener("change", e => {
+  _goalieGroupFilter = e.target.value; _goalieLimit = 10; renderGoalies();
+});
 
 async function loadAll() {
   setStatus("ok", "Refreshing live data…");
