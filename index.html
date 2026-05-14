@@ -595,6 +595,7 @@
               <option value="spg">Shots / game</option>
               <option value="hpg">Hits / game</option>
               <option value="toi">Time on ice / game</option>
+              <option value="shotpct">Shooting %</option>
               <option value="plusminus">+/−</option>
             </select>
           </div>
@@ -1008,26 +1009,6 @@ async function loadTopScorers() {
   }
   const rows = extractRows(data, "Statviewtype");
 
-  // === DEBUG (one-time on first load) ===
-  // Helps us see what the API actually returns vs. what we expect.
-  // Open DevTools console and look for the "PWHL skater debug" output.
-  if (!window._loggedSkaterDebug) {
-    window._loggedSkaterDebug = true;
-    console.group("PWHL skater debug");
-    console.log("Total players returned:", rows.length);
-    if (rows.length) {
-      const teams = {};
-      rows.forEach(r => {
-        const t = (r.team_code || r.team || r.team_abbr || "?").toString();
-        teams[t] = (teams[t] || 0) + 1;
-      });
-      console.log("Players per team:", teams);
-      console.log("All fields in first player record:", Object.keys(rows[0]).sort());
-      console.log("First player full record:", rows[0]);
-    }
-    console.groupEnd();
-  }
-
   // Helpers for parsing time-on-ice strings like "18:24" → 18.4 (decimal minutes)
   function toiToMin(s) {
     if (!s) return 0;
@@ -1041,32 +1022,39 @@ async function loadTopScorers() {
 
   return rows.map(r => {
     const gp = num(pick(r, "games_played", "gp"));
-    const fow = num(pick(r, "faceoff_wins", "fow", "faceoffs_won"));
-    const fol = num(pick(r, "faceoff_losses", "fol", "faceoffs_lost"));
-    const foa = num(pick(r, "faceoff_attempts", "faceoffs_taken", "faceoffs", "fo_attempts")) || (fow + fol);
+    // Real PWHL field names (confirmed via debug log):
+    // faceoff_pct (string %), faceoff_wins, faceoff_attempts, faceoff_wa (e.g. "253/400")
+    const fow = num(pick(r, "faceoff_wins"));
+    const foa = num(pick(r, "faceoff_attempts"));
+    // shots_on = actual shots on goal (the "shots" field is something else here)
+    const shotsOn = num(pick(r, "shots_on", "shots"));
     return {
-      name: [pick(r, "first_name", "firstname"), pick(r, "last_name", "lastname")].filter(Boolean).join(" ")
-             || pick(r, "player_name", "name") || "",
-      teamAbbr: pick(r, "team_code", "team_abbr", "team", "current_team") || "",
-      teamName: pick(r, "team_name", "team_full_name") || "",
-      pos: pick(r, "position", "position_code", "pos") || "",
+      name: [pick(r, "first_name"), pick(r, "last_name")].filter(Boolean).join(" ")
+             || pick(r, "name") || "",
+      teamAbbr: pick(r, "team_code") || "",
+      teamName: pick(r, "team_name") || "",
+      pos: pick(r, "position") || "",
       gp,
-      g:   num(pick(r, "goals", "g")),
-      a:   num(pick(r, "assists", "a")),
-      pts: num(pick(r, "points", "pts")),
-      ppg: num(pick(r, "power_play_goals", "ppg", "pp_goals", "powerplay_goals")),
-      ppa: num(pick(r, "power_play_assists", "ppa", "pp_assists")),
-      shg: num(pick(r, "short_handed_goals", "shg", "sh_goals", "shorthand_goals", "shorthanded_goals")),
-      sha: num(pick(r, "short_handed_assists", "sha", "sh_assists")),
-      shots: num(pick(r, "shots", "shots_on_goal", "sog")),
+      g:   num(pick(r, "goals")),
+      a:   num(pick(r, "assists")),
+      pts: num(pick(r, "points")),
+      ppg: num(pick(r, "power_play_goals")),
+      ppa: num(pick(r, "power_play_assists")),
+      shg: num(pick(r, "short_handed_goals")),
+      sha: num(pick(r, "short_handed_assists")),
+      shots: shotsOn,
       hits:  num(pick(r, "hits")),
-      pim:   num(pick(r, "penalty_minutes", "pim")),
-      plusMinus: num(pick(r, "plus_minus", "plusminus", "plus_minus_rating")),
-      fow, fol, foa,
-      fopct: foa > 0 ? (fow / foa) * 100 : 0,
-      // Time on ice: per-game (preferred) or total
-      toiPerGame: toiToMin(pick(r, "time_on_ice_avg", "toi_per_game", "toi_avg", "avg_toi")) ||
-                  (gp > 0 ? toiToMin(pick(r, "time_on_ice", "toi", "total_time_on_ice")) / gp : 0),
+      pim:   num(pick(r, "penalty_minutes")),
+      plusMinus: num(pick(r, "plus_minus")),
+      shotPct: parseFloat(pick(r, "shooting_percentage") || 0) || 0,
+      // Faceoffs: prefer pre-computed pct, fall back to manual calc
+      fow,
+      foa,
+      fopct: parseFloat(pick(r, "faceoff_pct") || 0) || (foa > 0 ? (fow / foa) * 100 : 0),
+      // Hits/G: use pre-computed avg, fall back to manual calc
+      hitsPerGame: parseFloat(pick(r, "hits_per_game_avg") || 0) || (gp > 0 ? num(pick(r, "hits")) / gp : 0),
+      // Time on ice per game: "MM:SS" string. Convert to decimal minutes for sorting.
+      toiPerGame: toiToMin(pick(r, "ice_time_per_game_avg", "ice_time_avg", "ice_time_minutes_seconds")),
     };
   }).filter(p => p.name);
 }
@@ -1342,7 +1330,7 @@ function renderSkaters(mode) {
   if (!_skaters.length) { el.innerHTML = `<div class="empty">No skater data.</div>`; return; }
 
   // Per-game stats need a minimum games-played filter to be meaningful
-  const minGP = (["fopct","spg","hpg","toi"].includes(_skaterMode)) ? 10 : 1;
+  const minGP = (["fopct","spg","hpg","toi","shotpct"].includes(_skaterMode)) ? 10 : 1;
 
   // For each mode: pick the field, the comparison direction, and how to display
   const cfg = {
@@ -1353,8 +1341,9 @@ function renderSkaters(mode) {
     shg:       { val: p => p.shg, fmt: p => p.shg, sec: p => `${p.g} G total`,  label: "SHG" },
     fopct:     { val: p => p.fopct, fmt: p => p.fopct.toFixed(1) + "%", sec: p => `${p.fow}/${p.foa}`, label: "FO%", minTotal: p => p.foa >= 30 },
     spg:       { val: p => p.gp > 0 ? p.shots / p.gp : 0, fmt: p => (p.gp > 0 ? (p.shots / p.gp).toFixed(2) : "—"), sec: p => `${p.shots} SOG`, label: "S/G" },
-    hpg:       { val: p => p.gp > 0 ? p.hits / p.gp : 0,  fmt: p => (p.gp > 0 ? (p.hits / p.gp).toFixed(2) : "—"),  sec: p => `${p.hits} hits`, label: "HIT/G" },
+    hpg:       { val: p => p.hitsPerGame, fmt: p => p.hitsPerGame.toFixed(2), sec: p => `${p.hits} hits`, label: "HIT/G" },
     toi:       { val: p => p.toiPerGame, fmt: p => p.toiPerGame > 0 ? minutesToClock(p.toiPerGame) : "—", sec: p => `${p.gp} GP`, label: "TOI/G" },
+    shotpct:   { val: p => p.shotPct, fmt: p => p.shotPct.toFixed(1) + "%", sec: p => `${p.g}G / ${p.shots} SOG`, label: "SH%", minTotal: p => p.shots >= 25 },
     plusminus: { val: p => p.plusMinus, fmt: p => (p.plusMinus > 0 ? "+" : "") + p.plusMinus, sec: p => `${p.g}G ${p.a}A`, label: "+/−" },
   };
   const c = cfg[_skaterMode] || cfg.points;
