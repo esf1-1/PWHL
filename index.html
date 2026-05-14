@@ -494,21 +494,6 @@
     color: var(--win);
     border: 1px solid rgba(110,231,168,0.3);
   }
-  .badge.fa-ufa {
-    background: rgba(124,58,237,0.18);
-    color: var(--accent-glow);
-    border: 1px solid rgba(124,58,237,0.4);
-  }
-  .badge.fa-rfa {
-    background: rgba(251,191,36,0.15);
-    color: var(--ot);
-    border: 1px solid rgba(251,191,36,0.35);
-  }
-  .badge.fa-expires {
-    background: rgba(248,113,113,0.12);
-    color: var(--loss);
-    border: 1px solid rgba(248,113,113,0.3);
-  }
 
   /* Explanation note below qualified leaderboards (goalies, faceoff%) */
   .qualified-note {
@@ -697,9 +682,6 @@
             <select id="skater-group-filter" class="stat-select compact">
               <option value="">All players</option>
               <option value="rookies">Rookies only</option>
-              <option value="ufa">UFAs this summer</option>
-              <option value="rfa">RFAs this summer</option>
-              <option value="anyfa">Any pending FA</option>
             </select>
           </div>
           <div id="skaters-list">
@@ -735,9 +717,6 @@
             <select id="goalie-group-filter" class="stat-select compact">
               <option value="">All goalies</option>
               <option value="rookies">Rookies only</option>
-              <option value="ufa">UFAs this summer</option>
-              <option value="rfa">RFAs this summer</option>
-              <option value="anyfa">Any pending FA</option>
             </select>
           </div>
           <div id="goalies-list">
@@ -808,57 +787,6 @@ const PLAYOFF_SEASON_ID = 9;
 const PWHL_API = "https://lscluster.hockeytech.com/feed/index.php";
 const PWHL_KEY = "446521baf8c38984";
 const PWHL_CLIENT = "pwhl";
-
-// ====== PENDING FREE AGENTS (Summer 2026) ======
-// Sourced from The Ice Garden's PWHL Master Spreadsheet (search "PWHL Master Spreadsheet"
-// on theicegarden.com). Update as players re-sign over the summer.
-//
-// Status: "UFA" (unrestricted) | "RFA" (restricted) | "EXPIRES" (rights expire)
-// Names use the API format "Last, First" or "First Last" — both work, we normalize when matching.
-//
-// Currently populated for Toronto only (other 7 teams' tabs need manual entry).
-// Anyone not listed here is treated as signed.
-const PENDING_FAS = {
-  // === TOR ===
-  "Nurse, Sarah": "UFA",
-  "Gardiner, Jenn": "UFA",
-  "Rosenthal, Gabby": "UFA",
-  "Daniel, Izzy": "UFA",
-  "McMahon, Mannon": "UFA",
-  "Meixner, Anna": "UFA",
-  "Chan, Katie": "UFA",
-  "Lappan, Darcie": "UFA",
-  "Schneider, Malia": "UFA",
-  "Thompson, Claire": "UFA",
-  "Channell-Watkins, Mellissa": "UFA",
-  "Bard, Sydney": "UFA",
-  "Karjalainen, Sini": "UFA",
-  "Campbell, Kristen": "UFA",
-  "Newell, Kimberly": "UFA",
-  "Karvinen, Michelle": "RFA",
-  "Samoskevich, Madison": "RFA",
-  "Shokhina, Anna": "RFA",
-  "Bassi, Chanreet": "RFA",
-  "Brooks, Brianna": "RFA",
-  // === Add other teams here as you collect them ===
-};
-
-// Build a lookup that handles both "Last, First" and "First Last" formats
-const _faLookup = {};
-Object.keys(PENDING_FAS).forEach(key => {
-  // Original "Last, First"
-  _faLookup[key.toLowerCase()] = PENDING_FAS[key];
-  // Flipped "First Last"
-  if (key.includes(",")) {
-    const [last, first] = key.split(",").map(s => s.trim());
-    _faLookup[`${first} ${last}`.toLowerCase()] = PENDING_FAS[key];
-  }
-});
-
-function getFAStatus(playerName) {
-  if (!playerName) return null;
-  return _faLookup[playerName.toLowerCase()] || null;
-}
 
 // Where clicking a game card sends you. The same URL handles live games AND
 // post-game box scores — the PWHL site renders different content based on game state.
@@ -1210,7 +1138,6 @@ async function loadTopScorers() {
       teamName: pick(r, "team_name") || "",
       pos: pick(r, "position") || "",
       isRookie: String(pick(r, "rookie") || "0") === "1",
-      faStatus: getFAStatus(name),  // null if not a pending FA
       gp,
       g:   num(pick(r, "goals")),
       a:   num(pick(r, "assists")),
@@ -1257,7 +1184,6 @@ async function loadTopGoalies() {
       teamAbbr: pick(r, "team_code", "team_abbr", "team") || "",
       teamName: pick(r, "team_name", "team_full_name") || "",
       isRookie: String(pick(r, "rookie") || "0") === "1",
-      faStatus: getFAStatus(name),
       gp: num(pick(r, "games_played", "gp")),
       w:  num(pick(r, "wins", "w")),
       l:  num(pick(r, "losses", "l")),
@@ -1527,15 +1453,6 @@ function applyPlayerFilters(players, teamFilter, groupFilter) {
   if (groupFilter === "rookies") {
     out = out.filter(p => p.isRookie);
     labels.push("rookies only");
-  } else if (groupFilter === "ufa") {
-    out = out.filter(p => p.faStatus === "UFA");
-    labels.push("UFAs");
-  } else if (groupFilter === "rfa") {
-    out = out.filter(p => p.faStatus === "RFA");
-    labels.push("RFAs");
-  } else if (groupFilter === "anyfa") {
-    out = out.filter(p => p.faStatus); // UFA, RFA, or EXPIRES
-    labels.push("pending FAs");
   }
   return { players: out, label: labels.join(" · ") };
 }
@@ -1557,7 +1474,7 @@ function renderSkaters(mode) {
     shg:       { val: p => p.shg, fmt: p => p.shg, sec: p => `${p.g} G total`,  label: "SHG" },
     gwg:       { val: p => p.gwg, fmt: p => p.gwg, sec: p => `${p.g} G total`,  label: "GWG" },
     otg:       { val: p => p.otg, fmt: p => p.otg, sec: p => `${p.g} G total`,  label: "OTG" },
-    fopct:     { val: p => p.fopct, fmt: p => p.fopct.toFixed(1) + "%", sec: p => `${p.fow}/${p.foa}`, label: "FO%", minTotal: p => p.foa >= 30 },
+    fopct:     { val: p => p.fopct, fmt: p => p.fopct.toFixed(1) + "%", sec: p => `${p.fow}/${p.foa}`, label: "FO%", minTotal: p => p.foa >= 50 },
     spg:       { val: p => p.gp > 0 ? p.shots / p.gp : 0, fmt: p => (p.gp > 0 ? (p.shots / p.gp).toFixed(2) : "—"), sec: p => `${p.shots} SOG`, label: "S/G" },
     shotpct:   { val: p => p.shotPct, fmt: p => p.shotPct.toFixed(1) + "%", sec: p => `${p.g}G / ${p.shots} SOG`, label: "SH%", minTotal: p => p.shots >= 25 },
     hits:      { val: p => p.hits, fmt: p => p.hits, sec: p => `${p.hitsPerGame.toFixed(2)}/G`, label: "HITS" },
@@ -1594,7 +1511,6 @@ function renderSkaters(mode) {
     const col = colorForTeam(p.teamAbbr);
     const badges = [];
     if (p.isRookie) badges.push(`<span class="badge rookie" title="Rookie">R</span>`);
-    if (p.faStatus) badges.push(`<span class="badge fa-${p.faStatus.toLowerCase()}" title="${p.faStatus === "UFA" ? "Unrestricted Free Agent (2026)" : p.faStatus === "RFA" ? "Restricted Free Agent (2026)" : "Rights expiring"}">${p.faStatus}</span>`);
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
@@ -1617,7 +1533,17 @@ function renderSkaters(mode) {
       ${canCollapse ? `<button type="button" data-action="reset" data-target="skaters">Show top 10</button>` : ""}
     </div>
   ` : "";
-  el.innerHTML = rows + controls;
+
+  // Stat-specific qualifier notes
+  let note = "";
+  if (_skaterMode === "fopct") {
+    note = `<div class="qualified-note">Qualified players: minimum <strong>50 faceoff attempts</strong> and <strong>10 games played</strong>.</div>`;
+  } else if (_skaterMode === "shotpct") {
+    note = `<div class="qualified-note">Qualified players: minimum <strong>25 shots on goal</strong> and <strong>10 games played</strong>.</div>`;
+  } else if (["spg","hpg","toi"].includes(_skaterMode)) {
+    note = `<div class="qualified-note">Qualified players: minimum <strong>10 games played</strong> for per-game stats.</div>`;
+  }
+  el.innerHTML = rows + controls + note;
 }
 
 // Format decimal minutes (e.g. 18.4) as MM:SS for time-on-ice display
@@ -1660,7 +1586,6 @@ function renderGoalies(mode) {
     else                            { stat = g.gaa ? g.gaa.toFixed(2) : "—"; sec = `${g.gp} GP · ${g.w}W`; }
     const badges = [];
     if (g.isRookie) badges.push(`<span class="badge rookie" title="Rookie">R</span>`);
-    if (g.faStatus) badges.push(`<span class="badge fa-${g.faStatus.toLowerCase()}" title="${g.faStatus === "UFA" ? "Unrestricted Free Agent (2026)" : g.faStatus === "RFA" ? "Restricted Free Agent (2026)" : "Rights expiring"}">${g.faStatus}</span>`);
     return `
       <div class="leader-row ${i === 0 ? "top1" : ""}">
         <div class="rk">${i+1}</div>
