@@ -1026,8 +1026,8 @@ async function loadTopScorers() {
     // faceoff_pct (string %), faceoff_wins, faceoff_attempts, faceoff_wa (e.g. "253/400")
     const fow = num(pick(r, "faceoff_wins"));
     const foa = num(pick(r, "faceoff_attempts"));
-    // shots_on = actual shots on goal (the "shots" field is something else here)
-    const shotsOn = num(pick(r, "shots_on", "shots"));
+    // 'shots' = actual shots on goal (NOT 'shots_on', which is always 0 in PWHL data — confirmed via live response)
+    const shotsOn = num(pick(r, "shots"));
     return {
       name: [pick(r, "first_name"), pick(r, "last_name")].filter(Boolean).join(" ")
              || pick(r, "name") || "",
