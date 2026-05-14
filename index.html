@@ -574,6 +574,144 @@
   }
 
   ::selection { background: var(--accent); color: #0a0a0c; }
+
+  /* ===== Page tabs (Live / Analytics) ===== */
+  nav.page-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(124,58,237,0.02);
+  }
+  .page-tab {
+    display: inline-block;
+    padding: 14px 22px;
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+    cursor: pointer;
+  }
+  .page-tab:hover { color: var(--text); }
+  .page-tab.active {
+    color: var(--text-strong);
+    border-bottom-color: var(--accent);
+  }
+  .page-content[hidden] { display: none; }
+
+  /* ===== Analytics page ===== */
+  main.analytics-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 28px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* Shot map controls bar */
+  .shot-map-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .shot-map-controls .stat-select { flex: 0 1 auto; min-width: 130px; }
+  .shot-map-controls #shotmap-game { flex: 1 1 280px; min-width: 240px; }
+
+  .shotmap-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .shotmap-meta strong { color: var(--text-strong); font-weight: 600; }
+
+  .shotmap-container {
+    background: #0d1014;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    min-height: 400px;
+  }
+  .shotmap-container svg { width: 100%; height: auto; max-width: 900px; }
+  .shotmap-container .empty {
+    align-self: center;
+    padding: 40px 0;
+  }
+
+  /* Rink elements */
+  .rink-surface { fill: #fafafa; }
+  .rink-boards  { fill: none; stroke: #2a2a30; stroke-width: 1.5; }
+  .rink-redline { stroke: #d33; stroke-width: 1.5; }
+  .rink-blueline { stroke: #2a55c4; stroke-width: 1.5; }
+  .rink-goalline { stroke: #d33; stroke-width: 1; }
+  .rink-faceoff-circle { fill: none; stroke: #d33; stroke-width: 0.8; opacity: 0.7; }
+  .rink-faceoff-dot    { fill: #d33; opacity: 0.7; }
+  .rink-crease         { fill: rgba(64,128,255,0.18); stroke: #2a55c4; stroke-width: 0.8; }
+  .rink-trapezoid      { fill: none; stroke: #2a2a30; stroke-width: 0.6; stroke-dasharray: 3 2; opacity: 0.4; }
+  .rink-net            { fill: #aaa; opacity: 0.7; }
+
+  /* Shot dots */
+  .shot-dot { cursor: pointer; transition: r 0.15s, stroke-width 0.15s; }
+  .shot-dot:hover { stroke-width: 2; }
+  .shot-dot.goal { stroke: #ffffff; stroke-width: 1.5; }
+  .shot-dot.shot { stroke: rgba(0,0,0,0.4); stroke-width: 0.5; opacity: 0.85; }
+  .shot-dot.miss { stroke: rgba(0,0,0,0.3); stroke-width: 0.5; opacity: 0.5; }
+
+  /* Legend below the rink */
+  .shotmap-legend {
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .shotmap-legend .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot-legend {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+  }
+  .dot-legend.goal { background: #fbbf24; border: 1.5px solid #fff; }
+  .dot-legend.shot { background: #6ee7a8; border: 0.5px solid rgba(0,0,0,0.4); }
+  .dot-legend.miss { background: #7d7a86; border: 0.5px solid rgba(0,0,0,0.3); }
+
+  /* Tooltip shown on dot hover */
+  .shot-tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    max-width: 240px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+  }
+  .shot-tooltip.visible { opacity: 1; }
+  .shot-tooltip .tip-title { color: var(--text-strong); font-weight: 600; margin-bottom: 4px; }
+  .shot-tooltip .tip-meta { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
 </style>
 </head>
 <body>
@@ -593,6 +731,12 @@
   </div>
 </header>
 
+<nav class="page-tabs">
+  <a href="#live" class="page-tab active" data-page="live">Live</a>
+  <a href="#analytics" class="page-tab" data-page="analytics">Analytics</a>
+</nav>
+
+<div id="page-live" class="page-content">
 <section class="scores-strip">
   <div class="section-head">
     <h2><span class="accent-bar"></span>Recent Scores</h2>
@@ -768,6 +912,59 @@
     </section>
   </aside>
 </main>
+</div><!-- /page-live -->
+
+<div id="page-analytics" class="page-content" hidden>
+  <main class="analytics-wrap">
+    <section class="panel">
+      <div class="section-head">
+        <h2><span class="accent-bar"></span>Shot Map</h2>
+        <div class="meta">Single-game · click any dot for details</div>
+      </div>
+      <div class="shot-map-controls">
+        <select id="shotmap-game" class="stat-select">
+          <option value="">Loading games…</option>
+        </select>
+        <select id="shotmap-team" class="stat-select compact">
+          <option value="">Both teams</option>
+        </select>
+        <select id="shotmap-period" class="stat-select compact">
+          <option value="">All periods</option>
+          <option value="1">1st</option>
+          <option value="2">2nd</option>
+          <option value="3">3rd</option>
+          <option value="4">OT</option>
+          <option value="5">SO</option>
+        </select>
+        <select id="shotmap-result" class="stat-select compact">
+          <option value="">All shots</option>
+          <option value="goal">Goals only</option>
+          <option value="shot">Saved/blocked only</option>
+          <option value="miss">Missed only</option>
+        </select>
+      </div>
+      <div id="shotmap-meta" class="shotmap-meta"></div>
+      <div id="shotmap-container" class="shotmap-container">
+        <div class="empty">Pick a game to load shot data…</div>
+      </div>
+      <div id="shotmap-legend" class="shotmap-legend" hidden>
+        <div class="legend-item"><span class="dot-legend goal"></span>Goal</div>
+        <div class="legend-item"><span class="dot-legend shot"></span>Saved / blocked</div>
+        <div class="legend-item"><span class="dot-legend miss"></span>Missed</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2><span class="accent-bar"></span>Coming Soon</h2>
+        <div class="meta">More analytics in development</div>
+      </div>
+      <div style="color: var(--muted); font-size: 13px; line-height: 1.7; padding: 8px 0;">
+        Season-long shot heat maps · scoring-chance density · player comparison · goal-timing distributions
+      </div>
+    </section>
+  </main>
+</div><!-- /page-analytics -->
 
 <footer class="site">
   Auto-refreshes every 60 seconds. Data: PWHL via HockeyTech/LeagueStat (unofficial). News: <a href="https://www.theixsports.com/the-ice-garden/" target="_blank" rel="noopener">The IX Sports / The Ice Garden</a> RSS.
@@ -1897,6 +2094,405 @@ async function loadAll() {
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+
+/* =========================================================================
+   ANALYTICS PAGE — SHOT MAP
+   Fetches single-game play-by-play from HockeyTech gameSummary endpoint
+   and draws shots on an NHL-spec rink. Self-contained: this whole block
+   could be moved to a separate file later when we go big with season-long
+   heat maps via GitHub Action.
+   ========================================================================= */
+
+// ====== Page tab switching ======
+function showPage(name) {
+  const live = document.getElementById("page-live");
+  const ana  = document.getElementById("page-analytics");
+  document.querySelectorAll(".page-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.page === name);
+  });
+  if (name === "analytics") {
+    live.hidden = true; ana.hidden = false;
+    initAnalyticsOnce();
+  } else {
+    live.hidden = false; ana.hidden = true;
+  }
+}
+document.querySelectorAll(".page-tab").forEach(t => {
+  t.addEventListener("click", e => {
+    e.preventDefault();
+    const name = t.dataset.page;
+    history.replaceState(null, "", "#" + name);
+    showPage(name);
+  });
+});
+// On load, honor the URL hash so refreshes stay on the same page
+if (location.hash === "#analytics") showPage("analytics");
+
+// ====== Game picker — populated lazily the first time the user opens Analytics ======
+let _analyticsInitialized = false;
+let _gamesIndex = []; // [{id, date, home, away, hg, ag}]
+let _currentShots = [];     // last-parsed shot list
+let _currentGameMeta = null;
+
+async function initAnalyticsOnce() {
+  if (_analyticsInitialized) return;
+  _analyticsInitialized = true;
+  await populateGamePicker();
+  wireShotMapFilters();
+}
+
+async function populateGamePicker() {
+  const sel = document.getElementById("shotmap-game");
+  sel.innerHTML = `<option value="">Loading games…</option>`;
+  try {
+    // Pull both regular season and playoff schedules, take only finished games
+    const [reg, po] = await Promise.allSettled([
+      loadSchedule(SEASON_ID),
+      loadSchedule(PLAYOFF_SEASON_ID),
+    ]);
+    const all = [
+      ...(reg.status === "fulfilled" ? reg.value : []),
+      ...(po.status  === "fulfilled" ? po.value  : []),
+    ];
+    const games = [];
+    for (const g of all) {
+      const status = (pick(g, "game_status", "status") || "").toString();
+      const final = /final|complete/i.test(status) || status === "3";
+      if (!final) continue;
+      const id = pick(g, "game_id", "id", "gameId", "ID") || "";
+      if (!id) continue;
+      const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
+      const date = parseGameDate(dateStr);
+      games.push({
+        id,
+        date,
+        home: pick(g, "home_team_code", "home_code") || "",
+        away: pick(g, "visiting_team_code", "away_code") || "",
+        homeName: pick(g, "home_team_name", "home_team_city") || "",
+        awayName: pick(g, "visiting_team_name", "visiting_team_city") || "",
+        hg: Number(pick(g, "home_goal_count", "home_score")) || 0,
+        ag: Number(pick(g, "visiting_goal_count", "visiting_score")) || 0,
+      });
+    }
+    games.sort((a,b) => (b.date || 0) - (a.date || 0));
+    _gamesIndex = games;
+    if (!games.length) {
+      sel.innerHTML = `<option value="">No finished games yet</option>`;
+      return;
+    }
+    sel.innerHTML = games.map(g => {
+      const d = g.date ? g.date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+      return `<option value="${g.id}">${d} · ${g.away} ${g.ag} @ ${g.home} ${g.hg}</option>`;
+    }).join("");
+
+    // Auto-load the most recent game
+    sel.value = games[0].id;
+    loadAndRenderShotMap(games[0].id);
+  } catch (e) {
+    sel.innerHTML = `<option value="">Couldn't load games</option>`;
+    document.getElementById("shotmap-container").innerHTML =
+      `<div class="err">Couldn't load game list. <code>${escapeHtml(e.message || "")}</code></div>`;
+  }
+}
+
+function wireShotMapFilters() {
+  document.getElementById("shotmap-game").addEventListener("change", e => {
+    if (e.target.value) loadAndRenderShotMap(e.target.value);
+  });
+  ["shotmap-team", "shotmap-period", "shotmap-result"].forEach(id => {
+    document.getElementById(id).addEventListener("change", () => {
+      if (_currentShots.length) drawRink(_currentShots, _currentGameMeta);
+    });
+  });
+}
+
+// ====== Fetch single-game play-by-play ======
+async function loadGameSummary(gameId) {
+  // HockeyTech gameSummary view returns the box score + goal/penalty events.
+  // It does NOT return every shot — that's a different feed. We try the
+  // play-by-play feed first since it has shot coordinates.
+  const url = pwhlUrl({
+    feed: "statviewfeed",
+    view: "gameSummary",
+    game_id: gameId,
+    site_id: 0, lang: "en", fmt: "json", league_id: 1,
+  });
+  return await fetchJSON(url);
+}
+
+async function loadPlayByPlay(gameId) {
+  // The play-by-play feed has every event including shots with X/Y coordinates.
+  const url = pwhlUrl({
+    feed: "statviewfeed",
+    view: "playByPlay",
+    game_id: gameId,
+    site_id: 0, lang: "en", fmt: "json", league_id: 1,
+  });
+  return await fetchJSON(url);
+}
+
+// Walk the response recursively looking for objects that look like shot events.
+// Different HockeyTech installs nest events at different depths.
+function extractShotEvents(data) {
+  const shots = [];
+  const seen = new WeakSet();
+  function walk(o) {
+    if (!o || typeof o !== "object" || seen.has(o)) return;
+    seen.add(o);
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    // Heuristic: an event has either x/y or x_location/y_location, plus a type
+    const hasCoords = (o.x_location !== undefined && o.y_location !== undefined)
+                   || (o.x !== undefined && o.y !== undefined)
+                   || (o.xLocation !== undefined && o.yLocation !== undefined);
+    const typeHint = (o.event || o.type || o.event_type || o.eventType || "").toString().toLowerCase();
+    const isShot = /shot|goal|miss|block/i.test(typeHint);
+    if (hasCoords && isShot) shots.push(o);
+    for (const k of Object.keys(o)) walk(o[k]);
+  }
+  walk(data);
+  return shots;
+}
+
+// Normalize an event into our shot shape
+function normalizeShot(ev) {
+  const type = (ev.event || ev.type || ev.event_type || "").toString().toLowerCase();
+  let kind = "shot";
+  if (type.includes("goal")) kind = "goal";
+  else if (type.includes("miss")) kind = "miss";
+  else if (type.includes("block")) kind = "block";
+  return {
+    x: Number(ev.x_location ?? ev.x ?? ev.xLocation ?? 0),
+    y: Number(ev.y_location ?? ev.y ?? ev.yLocation ?? 0),
+    kind,
+    period: Number(ev.period ?? ev.periodNumber ?? 0),
+    time: ev.time || ev.event_time || ev.gameTime || "",
+    team: ev.team_code || ev.team || ev.teamCode || ev.shooter_team || "",
+    teamId: ev.team_id || ev.teamId || "",
+    shooter: ev.shooter_name || ev.player_name || ev.shooterName || ev.player || "",
+    goalie: ev.goalie_name || ev.goalieName || ev.goalie || "",
+    raw: ev,
+  };
+}
+
+async function loadAndRenderShotMap(gameId) {
+  const container = document.getElementById("shotmap-container");
+  const meta = document.getElementById("shotmap-meta");
+  const legend = document.getElementById("shotmap-legend");
+  container.innerHTML = `<div class="empty">Loading shot data…</div>`;
+  meta.innerHTML = "";
+  legend.hidden = true;
+
+  const game = _gamesIndex.find(g => String(g.id) === String(gameId));
+  _currentGameMeta = game;
+
+  let data;
+  try {
+    data = await loadPlayByPlay(gameId);
+  } catch (e) {
+    container.innerHTML = `<div class="err">Couldn't load play-by-play. <code>${escapeHtml(e.message || "")}</code></div>`;
+    return;
+  }
+
+  // DEBUG: log the response shape on the very first load so we can see what we got
+  if (!window._loggedPbpDebug) {
+    window._loggedPbpDebug = true;
+    console.group("PWHL play-by-play debug");
+    console.log("Response keys:", Object.keys(data || {}));
+    console.log("Full response:", data);
+    console.groupEnd();
+  }
+
+  const rawShots = extractShotEvents(data);
+  const shots = rawShots.map(normalizeShot);
+  _currentShots = shots;
+
+  if (!shots.length) {
+    container.innerHTML = `
+      <div class="err" style="max-width:600px;">
+        No shot coordinates found in the play-by-play response.<br><br>
+        <strong>This could mean:</strong> the PWHL feed doesn't include shot X/Y locations
+        for this game, or my parser missed the right field names. Open DevTools console
+        and look for "PWHL play-by-play debug" to inspect the raw response — I can adjust
+        the parser based on what's there.
+      </div>
+    `;
+    return;
+  }
+
+  // Populate team filter dropdown with the teams in this game
+  const teamSel = document.getElementById("shotmap-team");
+  const teams = [...new Set(shots.map(s => s.team).filter(Boolean))];
+  if (teams.length) {
+    const prev = teamSel.value;
+    teamSel.innerHTML = `<option value="">Both teams</option>` +
+      teams.map(t => `<option value="${t}">${t}</option>`).join("");
+    if (teams.includes(prev)) teamSel.value = prev;
+  }
+
+  // Update meta line
+  const totals = { goal: 0, shot: 0, miss: 0, block: 0 };
+  shots.forEach(s => { totals[s.kind] = (totals[s.kind] || 0) + 1; });
+  meta.innerHTML = `
+    <strong>${shots.length} shots</strong> · ${totals.goal} goals · ${totals.shot} saved
+    ${totals.miss ? ` · ${totals.miss} missed` : ""}${totals.block ? ` · ${totals.block} blocked` : ""}
+    ${game ? `<br>${game.awayName || game.away} <strong>${game.ag}</strong> @ ${game.homeName || game.home} <strong>${game.hg}</strong>` : ""}
+  `;
+  legend.hidden = false;
+  drawRink(shots, game);
+}
+
+// ====== Rink drawing ======
+// NHL/HockeyTech coordinate system:
+//   X: -100 to +100 (length), 0 is center ice
+//   Y: -42.5 to +42.5 (width), 0 is the centerline running goal-to-goal
+function drawRink(shots, game) {
+  const container = document.getElementById("shotmap-container");
+  const teamFilter = document.getElementById("shotmap-team").value;
+  const periodFilter = document.getElementById("shotmap-period").value;
+  const resultFilter = document.getElementById("shotmap-result").value;
+
+  // Apply filters
+  let filtered = shots.slice();
+  if (teamFilter)   filtered = filtered.filter(s => s.team === teamFilter);
+  if (periodFilter) filtered = filtered.filter(s => String(s.period) === periodFilter);
+  if (resultFilter) {
+    if (resultFilter === "goal") filtered = filtered.filter(s => s.kind === "goal");
+    else if (resultFilter === "miss") filtered = filtered.filter(s => s.kind === "miss");
+    else if (resultFilter === "shot") filtered = filtered.filter(s => s.kind === "shot" || s.kind === "block");
+  }
+
+  // Rink dimensions in coordinate space (feet)
+  const RINK_LEN = 200, RINK_WID = 85;
+  // SVG viewBox — add a small margin
+  const M = 4;
+  const vw = RINK_LEN + 2*M, vh = RINK_WID + 2*M;
+  // Coordinate space: x [-100,100] → svg [M, M+RINK_LEN], y [-42.5, 42.5] → svg [M+RINK_WID, M] (flip Y)
+  const sx = (x) => M + RINK_LEN/2 + x;
+  const sy = (y) => M + RINK_WID/2 - y;
+
+  // Rink elements
+  const goalLineX = 89; // standard NHL distance from center
+  const blueLineX = 25;
+  const faceoffCircleR = 15;
+  const faceoffDotR = 1;
+  const cornerR = 28; // rounded corner radius
+
+  function rinkBg() {
+    // Surface with rounded corners
+    return `<rect class="rink-surface" x="${M}" y="${M}" width="${RINK_LEN}" height="${RINK_WID}" rx="${cornerR}" ry="${cornerR}" />`;
+  }
+  function rinkBoards() {
+    return `<rect class="rink-boards" x="${M}" y="${M}" width="${RINK_LEN}" height="${RINK_WID}" rx="${cornerR}" ry="${cornerR}" />`;
+  }
+  function centerLine() {
+    return `<line class="rink-redline" x1="${sx(0)}" y1="${sy(42.5)}" x2="${sx(0)}" y2="${sy(-42.5)}" />`;
+  }
+  function blueLines() {
+    return `
+      <line class="rink-blueline" x1="${sx(-blueLineX)}" y1="${sy(42.5)}" x2="${sx(-blueLineX)}" y2="${sy(-42.5)}" />
+      <line class="rink-blueline" x1="${sx(blueLineX)}" y1="${sy(42.5)}" x2="${sx(blueLineX)}" y2="${sy(-42.5)}" />
+    `;
+  }
+  function goalLines() {
+    return `
+      <line class="rink-goalline" x1="${sx(-goalLineX)}" y1="${sy(36)}" x2="${sx(-goalLineX)}" y2="${sy(-36)}" />
+      <line class="rink-goalline" x1="${sx(goalLineX)}" y1="${sy(36)}" x2="${sx(goalLineX)}" y2="${sy(-36)}" />
+    `;
+  }
+  function faceoffCircles() {
+    const spots = [
+      { x: -69, y:  22 }, { x: -69, y: -22 },
+      { x:  69, y:  22 }, { x:  69, y: -22 },
+    ];
+    return spots.map(p =>
+      `<circle class="rink-faceoff-circle" cx="${sx(p.x)}" cy="${sy(p.y)}" r="${faceoffCircleR}" />`
+    ).join("") +
+      `<circle class="rink-faceoff-dot" cx="${sx(0)}" cy="${sy(0)}" r="1.5" />` +
+      spots.map(p => `<circle class="rink-faceoff-dot" cx="${sx(p.x)}" cy="${sy(p.y)}" r="1" />`).join("") +
+      // Neutral zone dots
+      [{x:-20,y:22},{x:-20,y:-22},{x:20,y:22},{x:20,y:-22}].map(p =>
+        `<circle class="rink-faceoff-dot" cx="${sx(p.x)}" cy="${sy(p.y)}" r="1" />`
+      ).join("");
+  }
+  function creases() {
+    return `
+      <path class="rink-crease" d="M ${sx(-goalLineX)} ${sy(-4)} L ${sx(-goalLineX+4.5)} ${sy(-4)} A 6 6 0 0 0 ${sx(-goalLineX+4.5)} ${sy(4)} L ${sx(-goalLineX)} ${sy(4)} Z" />
+      <path class="rink-crease" d="M ${sx(goalLineX)} ${sy(-4)} L ${sx(goalLineX-4.5)} ${sy(-4)} A 6 6 0 0 1 ${sx(goalLineX-4.5)} ${sy(4)} L ${sx(goalLineX)} ${sy(4)} Z" />
+    `;
+  }
+  function nets() {
+    return `
+      <rect class="rink-net" x="${sx(-goalLineX)-2}" y="${sy(3)}" width="2" height="6" />
+      <rect class="rink-net" x="${sx(goalLineX)}"   y="${sy(3)}" width="2" height="6" />
+    `;
+  }
+
+  // Color shots: goals stand out, saves are mid, misses faded
+  function dotColor(s, isFirstTeam) {
+    if (s.kind === "goal") return "#fbbf24";       // gold
+    if (s.kind === "miss") return "#7d7a86";       // grey
+    // Saved/blocked: tint by team if we have one
+    if (isFirstTeam) return "#a78bfa";             // lavender (accent-glow)
+    return "#6ee7a8";                              // mint
+  }
+
+  // Decide which team is "first" for coloring saves (uses alphabetical order)
+  const teamsInGame = [...new Set(filtered.map(s => s.team).filter(Boolean))].sort();
+  const firstTeam = teamsInGame[0];
+
+  // Draw dots, goals last so they're on top
+  const sorted = filtered.slice().sort((a,b) => (a.kind === "goal" ? 1 : 0) - (b.kind === "goal" ? 1 : 0));
+  const dots = sorted.map((s, i) => {
+    const cx = sx(s.x), cy = sy(s.y);
+    const r = s.kind === "goal" ? 2.6 : 1.8;
+    const color = dotColor(s, s.team === firstTeam);
+    return `<circle class="shot-dot ${s.kind}" cx="${cx}" cy="${cy}" r="${r}" fill="${color}" data-i="${i}" />`;
+  }).join("");
+
+  const svg = `
+    <svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" style="position:relative;">
+      ${rinkBg()}
+      ${centerLine()}
+      ${blueLines()}
+      ${goalLines()}
+      ${faceoffCircles()}
+      ${creases()}
+      ${nets()}
+      ${rinkBoards()}
+      ${dots}
+    </svg>
+  `;
+
+  container.innerHTML = `<div style="position:relative;width:100%;">${svg}<div id="shot-tooltip" class="shot-tooltip"></div></div>`;
+
+  // Tooltips
+  const tip = document.getElementById("shot-tooltip");
+  container.querySelectorAll(".shot-dot").forEach(node => {
+    node.addEventListener("mouseenter", e => {
+      const s = sorted[Number(node.dataset.i)];
+      tip.innerHTML = `
+        <div class="tip-title">${s.shooter || "Unknown shooter"}</div>
+        <div>${s.kind.toUpperCase()}${s.team ? " · " + s.team : ""}</div>
+        <div class="tip-meta">P${s.period}${s.time ? " · " + s.time : ""}${s.goalie ? " · vs " + s.goalie : ""}</div>
+      `;
+      tip.classList.add("visible");
+    });
+    node.addEventListener("mousemove", e => {
+      const rect = container.getBoundingClientRect();
+      tip.style.left = (e.clientX - rect.left + 12) + "px";
+      tip.style.top  = (e.clientY - rect.top + 12) + "px";
+    });
+    node.addEventListener("mouseleave", () => tip.classList.remove("visible"));
+  });
+
+  // Update meta to show filter counts
+  if (filtered.length !== shots.length) {
+    const meta = document.getElementById("shotmap-meta");
+    meta.innerHTML += `<br><span style="color:var(--accent-glow);">Showing ${filtered.length} of ${shots.length} shots</span>`;
+  }
+}
+
+// ====== End analytics page code ======
 
 loadAll();
 setInterval(loadAll, REFRESH_MS);
