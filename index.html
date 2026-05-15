@@ -2297,40 +2297,42 @@ function extractShotEvents(data) {
 }
 
 // Normalize an event into our shot shape using REAL PWHL field names
-// (confirmed via debug log). Shooter and goalie are nested objects with
-// first_name/last_name — we have to join them, not stringify the object.
+// (confirmed via debug log + a captured 'shot' event sample).
+//
+// Two structures observed in the API:
+//   "shot" events: top-level `player` and `goalie` keys (cleanest)
+//   "blocked_shot" / faceoff-style events: `player_home` + `player_visitor` pair
+// We check `player` first, then fall back to the home/visitor pair using team_id.
 function normalizeShot(ev) {
   const type = (ev.event || "").toString().toLowerCase();
-  // PWHL events: "shot" (saved), "goal", "missed_shot", "blocked_shot"
   let kind = "shot";
   if (type === "goal") kind = "goal";
   else if (type === "missed_shot") kind = "miss";
   else if (type === "blocked_shot") kind = "block";
 
-  // Helper: turn a nested player object into "First Last"
   const playerName = (obj) => obj
     ? [obj.first_name, obj.last_name].filter(Boolean).join(" ")
     : "";
 
-  // Pick the shooter. PWHL events seem to use player_home/player_visitor pairs
-  // (one is the shooter, the other is the goalie or defender). Use team_id
-  // to decide which side the shooter is on, then fall back to other likely keys.
-  const teamId = String(ev.team_id || "");
-  let shooter = "";
-  if (ev.player_home && String(ev.player_home.team_id) === teamId) shooter = playerName(ev.player_home);
-  else if (ev.player_visitor && String(ev.player_visitor.team_id) === teamId) shooter = playerName(ev.player_visitor);
-  // Some events may name the shooter directly
-  if (!shooter) shooter = playerName(ev.shooter) || playerName(ev.shot_player) || playerName(ev.scorer)
-                       || playerName(ev.scored_by_player) || playerName(ev.player) || "";
-  // Last resort — for goal events, "goal_scorer" or top-level scored_by may exist
-  if (!shooter && ev.scored_by) shooter = playerName(ev.scored_by);
+  // Shooter — try the simple top-level "player" key first, then the home/visitor pair
+  let shooter = playerName(ev.player);
+  if (!shooter) {
+    const teamId = String(ev.team_id || "");
+    if (ev.player_home && String(ev.player_home.team_id) === teamId) shooter = playerName(ev.player_home);
+    else if (ev.player_visitor && String(ev.player_visitor.team_id) === teamId) shooter = playerName(ev.player_visitor);
+  }
+  // Final fallbacks for any odd event shapes
+  if (!shooter) shooter = playerName(ev.shooter) || playerName(ev.scored_by) || playerName(ev.scorer)
+                       || playerName(ev.shot_player) || "";
 
-  // Goalie: same idea, but the goalie is on the OTHER team
-  let goalie = "";
-  if (ev.goalie) goalie = playerName(ev.goalie);
-  else if (ev.goalie_info) goalie = playerName(ev.goalie_info);
-  else if (ev.player_home && String(ev.player_home.team_id) !== teamId) goalie = playerName(ev.player_home);
-  else if (ev.player_visitor && String(ev.player_visitor.team_id) !== teamId) goalie = playerName(ev.player_visitor);
+  // Goalie — top-level `goalie` key, falling back to the opposing-team side of the pair
+  let goalie = playerName(ev.goalie);
+  if (!goalie) {
+    const teamId = String(ev.team_id || "");
+    if (ev.player_home && String(ev.player_home.team_id) !== teamId) goalie = playerName(ev.player_home);
+    else if (ev.player_visitor && String(ev.player_visitor.team_id) !== teamId) goalie = playerName(ev.player_visitor);
+  }
+  if (!goalie) goalie = playerName(ev.goalie_info) || "";
 
   return {
     x: Number(ev.x_location ?? 300),
@@ -2338,10 +2340,13 @@ function normalizeShot(ev) {
     kind,
     period: Number(ev.period_id ?? ev.period ?? 0),
     time: ev.time_formatted || ev.time || "",
-    team: ev.team_code || "",
+    team: ev.team_code || (ev.player && ev.player.team_code) || "",
     teamId: ev.team_id || "",
     shooter,
     goalie,
+    // Bonus: shot type / quality if available (used in tooltips later)
+    shotType: ev.shot_type_description || "",
+    shotQuality: ev.shot_quality_description || "",
     raw: ev,
   };
 }
@@ -2562,9 +2567,12 @@ function drawRink(shots, game) {
                       : s.kind === "miss" ? "MISSED SHOT"
                       : s.kind === "block" ? "BLOCKED SHOT"
                       : "SHOT ON GOAL";
+      // Optional details line — only show if we have type/quality info
+      const details = [s.shotType, s.shotQuality].filter(Boolean).join(" · ");
       tip.innerHTML = `
         <div class="tip-title">${s.shooter || "Unknown shooter"}</div>
         <div>${kindLabel}${s.team ? " · " + s.team : ""}</div>
+        ${details ? `<div class="tip-meta">${details}</div>` : ""}
         <div class="tip-meta">P${s.period}${s.time ? " · " + s.time : ""}${s.goalie ? " · vs " + s.goalie : ""}</div>
       `;
       tip.classList.add("visible");
