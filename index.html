@@ -2307,18 +2307,30 @@ function normalizeShot(ev) {
   else if (type === "missed_shot") kind = "miss";
   else if (type === "blocked_shot") kind = "block";
 
-  // Build shooter name from nested object. Different events use different keys.
-  // Goals have "scored_by", regular shots have "shot_player" or "shooter", etc.
-  const shooterObj = ev.shooter || ev.shot_player || ev.scorer || ev.scored_by_player
-                  || ev.player_visitor || ev.player_home;
-  const shooter = shooterObj
-    ? [shooterObj.first_name, shooterObj.last_name].filter(Boolean).join(" ")
-    : (ev.player_name || "");
-  // Goalie nested similarly
-  const goalieObj = ev.goalie || ev.goalie_info;
-  const goalie = goalieObj
-    ? [goalieObj.first_name, goalieObj.last_name].filter(Boolean).join(" ")
+  // Helper: turn a nested player object into "First Last"
+  const playerName = (obj) => obj
+    ? [obj.first_name, obj.last_name].filter(Boolean).join(" ")
     : "";
+
+  // Pick the shooter. PWHL events seem to use player_home/player_visitor pairs
+  // (one is the shooter, the other is the goalie or defender). Use team_id
+  // to decide which side the shooter is on, then fall back to other likely keys.
+  const teamId = String(ev.team_id || "");
+  let shooter = "";
+  if (ev.player_home && String(ev.player_home.team_id) === teamId) shooter = playerName(ev.player_home);
+  else if (ev.player_visitor && String(ev.player_visitor.team_id) === teamId) shooter = playerName(ev.player_visitor);
+  // Some events may name the shooter directly
+  if (!shooter) shooter = playerName(ev.shooter) || playerName(ev.shot_player) || playerName(ev.scorer)
+                       || playerName(ev.scored_by_player) || playerName(ev.player) || "";
+  // Last resort — for goal events, "goal_scorer" or top-level scored_by may exist
+  if (!shooter && ev.scored_by) shooter = playerName(ev.scored_by);
+
+  // Goalie: same idea, but the goalie is on the OTHER team
+  let goalie = "";
+  if (ev.goalie) goalie = playerName(ev.goalie);
+  else if (ev.goalie_info) goalie = playerName(ev.goalie_info);
+  else if (ev.player_home && String(ev.player_home.team_id) !== teamId) goalie = playerName(ev.player_home);
+  else if (ev.player_visitor && String(ev.player_visitor.team_id) !== teamId) goalie = playerName(ev.player_visitor);
 
   return {
     x: Number(ev.x_location ?? 300),
@@ -2363,9 +2375,15 @@ async function loadAndRenderShotMap(gameId) {
     const events = data?.GC?.Pxpverbose;
     if (Array.isArray(events) && events.length) {
       console.log("Total events:", events.length);
-      console.log("First event (all keys):", Object.keys(events[0]).sort());
-      console.log("First event raw:", events[0]);
-      console.log("First shot-like event raw:", events.find(e => /shot|goal|miss/i.test(String(e?.event || e?.type || e?.event_type || ""))));
+      // Find one of each shot type so we can see real-world field names
+      const shotEv = events.find(e => e?.event === "shot");
+      const goalEv = events.find(e => e?.event === "goal");
+      const missEv = events.find(e => e?.event === "missed_shot");
+      const blockEv = events.find(e => e?.event === "blocked_shot");
+      if (shotEv) console.log("First 'shot' event:", JSON.stringify(shotEv, null, 2));
+      if (goalEv) console.log("First 'goal' event:", JSON.stringify(goalEv, null, 2));
+      if (missEv) console.log("First 'missed_shot' event:", JSON.stringify(missEv, null, 2));
+      if (blockEv) console.log("First 'blocked_shot' event:", JSON.stringify(blockEv, null, 2));
     }
     console.groupEnd();
   }
