@@ -1268,11 +1268,18 @@ function buildRecentScores(allRows) {
     console.groupEnd();
   }
   for (const g of allRows) {
+    // Prefer the ISO8601 timestamp with timezone — confirmed available in PWHL API as GameDateISO8601.
+    // Falls back to date+time fields for older/odd records.
+    const iso = pick(g, "GameDateISO8601", "date_time_played");
     const dateStr = pick(g, "date_played", "GameDate", "game_date", "date") || "";
-    // The schedule API stores start time in a separate field for upcoming games.
-    // Try multiple likely names so games show their real ET start time instead of midnight.
-    const timeStr = pick(g, "scheduled_time", "start_time", "game_time", "start_time_str", "time") || "";
-    const d = parseGameDate(dateStr, timeStr);
+    const timeStr = pick(g, "schedule_time", "scheduled_time", "start_time", "game_time") || "";
+    let d;
+    if (iso) {
+      const parsed = new Date(iso);
+      d = isNaN(parsed) ? null : parsed;
+    } else {
+      d = parseGameDate(dateStr, timeStr);
+    }
     if (!d || isNaN(d)) continue;
     if (d < since || d > until) continue;
 
@@ -2270,15 +2277,25 @@ async function loadPlayByPlay(gameId) {
 }
 
 // Walk the response recursively looking for objects that look like shot events.
-// Different HockeyTech installs nest events at different depths.
+// Different HockeyTech installs nest events at different depths. For PWHL,
+// events live at data.GC.Pxpverbose (confirmed via debug log), but we keep the
+// recursive walk as a fallback in case the structure ever changes.
 function extractShotEvents(data) {
+  // Try the known path first
+  const knownPath = data?.GC?.Pxpverbose;
+  if (Array.isArray(knownPath) && knownPath.length) {
+    return knownPath.filter(ev => {
+      const type = (ev?.event || ev?.type || ev?.event_type || ev?.eventType || "").toString().toLowerCase();
+      return /shot|goal|miss|block/i.test(type);
+    });
+  }
+  // Fallback: recursive walk
   const shots = [];
   const seen = new WeakSet();
   function walk(o) {
     if (!o || typeof o !== "object" || seen.has(o)) return;
     seen.add(o);
     if (Array.isArray(o)) { o.forEach(walk); return; }
-    // Heuristic: an event has either x/y or x_location/y_location, plus a type
     const hasCoords = (o.x_location !== undefined && o.y_location !== undefined)
                    || (o.x !== undefined && o.y !== undefined)
                    || (o.xLocation !== undefined && o.yLocation !== undefined);
@@ -2326,6 +2343,7 @@ async function loadAndRenderShotMap(gameId) {
   let data;
   try {
     data = await loadPlayByPlay(gameId);
+    window._lastPbp = data; // expose globally for debugging
   } catch (e) {
     container.innerHTML = `<div class="err">Couldn't load play-by-play. <code>${escapeHtml(e.message || "")}</code></div>`;
     return;
@@ -2337,6 +2355,13 @@ async function loadAndRenderShotMap(gameId) {
     console.group("PWHL play-by-play debug");
     console.log("Response keys:", Object.keys(data || {}));
     console.log("Full response:", data);
+    const events = data?.GC?.Pxpverbose;
+    if (Array.isArray(events) && events.length) {
+      console.log("Total events:", events.length);
+      console.log("First event (all keys):", Object.keys(events[0]).sort());
+      console.log("First event raw:", events[0]);
+      console.log("First shot-like event raw:", events.find(e => /shot|goal|miss/i.test(String(e?.event || e?.type || e?.event_type || ""))));
+    }
     console.groupEnd();
   }
 
