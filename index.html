@@ -2324,6 +2324,20 @@ function normalizeShot(ev) {
   // Final fallbacks for any odd event shapes
   if (!shooter) shooter = playerName(ev.shooter) || playerName(ev.scored_by) || playerName(ev.scorer)
                        || playerName(ev.shot_player) || "";
+  // Last-ditch: walk the event for ANY key containing a player-shaped object whose
+  // team_id matches the shooter's team. Handles event types we haven't seen yet.
+  if (!shooter) {
+    const teamId = String(ev.team_id || "");
+    for (const [k, v] of Object.entries(ev)) {
+      if (k === "goalie" || k === "goalie_info") continue;
+      if (v && typeof v === "object" && v.first_name && v.last_name) {
+        if (!teamId || String(v.team_id) === teamId) {
+          shooter = playerName(v);
+          break;
+        }
+      }
+    }
+  }
 
   // Goalie — top-level `goalie` key, falling back to the opposing-team side of the pair
   let goalie = playerName(ev.goalie);
@@ -2334,19 +2348,33 @@ function normalizeShot(ev) {
   }
   if (!goalie) goalie = playerName(ev.goalie_info) || "";
 
+  // Robust team_code extraction. Goals/misses may not have team_code at the top
+  // level — pull it from whichever nested player object matches our team_id.
+  let teamCode = ev.team_code || "";
+  if (!teamCode) {
+    const teamId = String(ev.team_id || "");
+    if (ev.player && ev.player.team_code) teamCode = ev.player.team_code;
+    else {
+      for (const [k, v] of Object.entries(ev)) {
+        if (k === "goalie" || k === "goalie_info") continue;
+        if (v && typeof v === "object" && v.team_code && (!teamId || String(v.team_id) === teamId)) {
+          teamCode = v.team_code;
+          break;
+        }
+      }
+    }
+  }
+
   return {
     x: Number(ev.x_location ?? 300),
     y: Number(ev.y_location ?? 150),
     kind,
     period: Number(ev.period_id ?? ev.period ?? 0),
     time: ev.time_formatted || ev.time || "",
-    team: ev.team_code || (ev.player && ev.player.team_code) || "",
+    team: teamCode,
     teamId: ev.team_id || "",
     shooter,
     goalie,
-    // Bonus: shot type / quality if available (used in tooltips later)
-    shotType: ev.shot_type_description || "",
-    shotQuality: ev.shot_quality_description || "",
     raw: ev,
   };
 }
@@ -2420,14 +2448,7 @@ async function loadAndRenderShotMap(gameId) {
     if (teams.includes(prev)) teamSel.value = prev;
   }
 
-  // Update meta line
-  const totals = { goal: 0, shot: 0, miss: 0, block: 0 };
-  shots.forEach(s => { totals[s.kind] = (totals[s.kind] || 0) + 1; });
-  meta.innerHTML = `
-    <strong>${shots.length} shots</strong> · ${totals.goal} goals · ${totals.shot} saved
-    ${totals.miss ? ` · ${totals.miss} missed` : ""}${totals.block ? ` · ${totals.block} blocked` : ""}
-    ${game ? `<br>${game.awayName || game.away} <strong>${game.ag}</strong> @ ${game.homeName || game.home} <strong>${game.hg}</strong>` : ""}
-  `;
+  // Update meta line — drawRink will fully rebuild it on each filter change
   legend.hidden = false;
   drawRink(shots, game);
 }
@@ -2567,12 +2588,9 @@ function drawRink(shots, game) {
                       : s.kind === "miss" ? "MISSED SHOT"
                       : s.kind === "block" ? "BLOCKED SHOT"
                       : "SHOT ON GOAL";
-      // Optional details line — only show if we have type/quality info
-      const details = [s.shotType, s.shotQuality].filter(Boolean).join(" · ");
       tip.innerHTML = `
         <div class="tip-title">${s.shooter || "Unknown shooter"}</div>
         <div>${kindLabel}${s.team ? " · " + s.team : ""}</div>
-        ${details ? `<div class="tip-meta">${details}</div>` : ""}
         <div class="tip-meta">P${s.period}${s.time ? " · " + s.time : ""}${s.goalie ? " · vs " + s.goalie : ""}</div>
       `;
       tip.classList.add("visible");
@@ -2585,11 +2603,22 @@ function drawRink(shots, game) {
     node.addEventListener("mouseleave", () => tip.classList.remove("visible"));
   });
 
-  // Update meta to show filter counts
-  if (filtered.length !== shots.length) {
-    const meta = document.getElementById("shotmap-meta");
-    meta.innerHTML += `<br><span style="color:var(--accent-glow);">Showing ${filtered.length} of ${shots.length} shots</span>`;
+  // Update meta to show filter counts. Re-render the whole meta block each time
+  // (rather than appending) so filter changes don't stack up lines.
+  const meta = document.getElementById("shotmap-meta");
+  const totals = { goal: 0, shot: 0, miss: 0, block: 0 };
+  shots.forEach(s => { totals[s.kind] = (totals[s.kind] || 0) + 1; });
+  let metaHTML = `
+    <strong>${shots.length} shots</strong> · ${totals.goal} goals · ${totals.shot} saved
+    ${totals.miss ? ` · ${totals.miss} missed` : ""}${totals.block ? ` · ${totals.block} blocked` : ""}
+  `;
+  if (game) {
+    metaHTML += `<br>${game.awayName || game.away} <strong>${game.ag}</strong> @ ${game.homeName || game.home} <strong>${game.hg}</strong>`;
   }
+  if (filtered.length !== shots.length) {
+    metaHTML += `<br><span style="color:var(--accent-glow);">Showing ${filtered.length} of ${shots.length} shots</span>`;
+  }
+  meta.innerHTML = metaHTML;
 }
 
 // ====== End analytics page code ======
