@@ -2277,54 +2277,59 @@ async function loadPlayByPlay(gameId) {
 }
 
 // Walk the response recursively looking for objects that look like shot events.
-// Different HockeyTech installs nest events at different depths. For PWHL,
-// events live at data.GC.Pxpverbose (confirmed via debug log), but we keep the
-// recursive walk as a fallback in case the structure ever changes.
-function extractShotEvents(data) {
-  // Try the known path first
-  const knownPath = data?.GC?.Pxpverbose;
-  if (Array.isArray(knownPath) && knownPath.length) {
-    return knownPath.filter(ev => {
-      const type = (ev?.event || ev?.type || ev?.event_type || ev?.eventType || "").toString().toLowerCase();
-      return /shot|goal|miss|block/i.test(type);
-    });
-  }
-  // Fallback: recursive walk
-  const shots = [];
-  const seen = new WeakSet();
-  function walk(o) {
-    if (!o || typeof o !== "object" || seen.has(o)) return;
-    seen.add(o);
-    if (Array.isArray(o)) { o.forEach(walk); return; }
-    const hasCoords = (o.x_location !== undefined && o.y_location !== undefined)
-                   || (o.x !== undefined && o.y !== undefined)
-                   || (o.xLocation !== undefined && o.yLocation !== undefined);
-    const typeHint = (o.event || o.type || o.event_type || o.eventType || "").toString().toLowerCase();
-    const isShot = /shot|goal|miss|block/i.test(typeHint);
-    if (hasCoords && isShot) shots.push(o);
-    for (const k of Object.keys(o)) walk(o[k]);
-  }
-  walk(data);
-  return shots;
+// PWHL events live at data.GC.Pxpverbose with these event types:
+//   "shot"          → shot on goal that was saved
+//   "goal"          → goal
+//   "missed_shot"   → shot that missed the net
+//   "blocked_shot"  → shot blocked by a non-goalie defender
+// We use exact event-name matching (not substring) because "goalie_change" contains "goal".
+const SHOT_EVENT_TYPES = new Set(["shot", "goal", "missed_shot", "blocked_shot"]);
+
+function isShotEvent(ev) {
+  const t = (ev?.event || "").toString().toLowerCase();
+  return SHOT_EVENT_TYPES.has(t);
 }
 
-// Normalize an event into our shot shape
+function extractShotEvents(data) {
+  const events = data?.GC?.Pxpverbose;
+  if (!Array.isArray(events)) return [];
+  return events.filter(isShotEvent);
+}
+
+// Normalize an event into our shot shape using REAL PWHL field names
+// (confirmed via debug log). Shooter and goalie are nested objects with
+// first_name/last_name — we have to join them, not stringify the object.
 function normalizeShot(ev) {
-  const type = (ev.event || ev.type || ev.event_type || "").toString().toLowerCase();
+  const type = (ev.event || "").toString().toLowerCase();
+  // PWHL events: "shot" (saved), "goal", "missed_shot", "blocked_shot"
   let kind = "shot";
-  if (type.includes("goal")) kind = "goal";
-  else if (type.includes("miss")) kind = "miss";
-  else if (type.includes("block")) kind = "block";
+  if (type === "goal") kind = "goal";
+  else if (type === "missed_shot") kind = "miss";
+  else if (type === "blocked_shot") kind = "block";
+
+  // Build shooter name from nested object. Different events use different keys.
+  // Goals have "scored_by", regular shots have "shot_player" or "shooter", etc.
+  const shooterObj = ev.shooter || ev.shot_player || ev.scorer || ev.scored_by_player
+                  || ev.player_visitor || ev.player_home;
+  const shooter = shooterObj
+    ? [shooterObj.first_name, shooterObj.last_name].filter(Boolean).join(" ")
+    : (ev.player_name || "");
+  // Goalie nested similarly
+  const goalieObj = ev.goalie || ev.goalie_info;
+  const goalie = goalieObj
+    ? [goalieObj.first_name, goalieObj.last_name].filter(Boolean).join(" ")
+    : "";
+
   return {
-    x: Number(ev.x_location ?? ev.x ?? ev.xLocation ?? 0),
-    y: Number(ev.y_location ?? ev.y ?? ev.yLocation ?? 0),
+    x: Number(ev.x_location ?? 300),
+    y: Number(ev.y_location ?? 150),
     kind,
-    period: Number(ev.period ?? ev.periodNumber ?? 0),
-    time: ev.time || ev.event_time || ev.gameTime || "",
-    team: ev.team_code || ev.team || ev.teamCode || ev.shooter_team || "",
-    teamId: ev.team_id || ev.teamId || "",
-    shooter: ev.shooter_name || ev.player_name || ev.shooterName || ev.player || "",
-    goalie: ev.goalie_name || ev.goalieName || ev.goalie || "",
+    period: Number(ev.period_id ?? ev.period ?? 0),
+    time: ev.time_formatted || ev.time || "",
+    team: ev.team_code || "",
+    teamId: ev.team_id || "",
+    shooter,
+    goalie,
     raw: ev,
   };
 }
@@ -2405,9 +2410,10 @@ async function loadAndRenderShotMap(gameId) {
 }
 
 // ====== Rink drawing ======
-// NHL/HockeyTech coordinate system:
-//   X: -100 to +100 (length), 0 is center ice
-//   Y: -42.5 to +42.5 (width), 0 is the centerline running goal-to-goal
+// PWHL coordinate system (confirmed via debug — center ice faceoff is at 300, 150):
+//   X: 0 to 600 (length, left to right) — center ice at 300
+//   Y: 0 to 300 (width, top to bottom) — center ice at 150
+// We map this into a properly-proportioned rink SVG.
 function drawRink(shots, game) {
   const container = document.getElementById("shotmap-container");
   const teamFilter = document.getElementById("shotmap-team").value;
@@ -2424,24 +2430,27 @@ function drawRink(shots, game) {
     else if (resultFilter === "shot") filtered = filtered.filter(s => s.kind === "shot" || s.kind === "block");
   }
 
-  // Rink dimensions in coordinate space (feet)
+  // Rink dimensions in coordinate space (feet) — these are display units, NOT API units
   const RINK_LEN = 200, RINK_WID = 85;
   // SVG viewBox — add a small margin
   const M = 4;
   const vw = RINK_LEN + 2*M, vh = RINK_WID + 2*M;
-  // Coordinate space: x [-100,100] → svg [M, M+RINK_LEN], y [-42.5, 42.5] → svg [M+RINK_WID, M] (flip Y)
+  // Display-space transforms: feet (-100..100, -42.5..42.5) → svg pixels
   const sx = (x) => M + RINK_LEN/2 + x;
   const sy = (y) => M + RINK_WID/2 - y;
+  // API-coordinate transforms: (0..600, 0..300) → feet, then to svg pixels
+  // PWHL grid: center (300, 150), so x_api - 300 ∈ [-300, 300] maps to feet [-100, 100]
+  // and y_api - 150 ∈ [-150, 150] maps to feet [-42.5, 42.5] (y is flipped: small api y = top)
+  const apiX = (x) => sx(((Number(x) - 300) / 300) * 100);
+  const apiY = (y) => sy(-((Number(y) - 150) / 150) * 42.5);
 
   // Rink elements
   const goalLineX = 89; // standard NHL distance from center
   const blueLineX = 25;
   const faceoffCircleR = 15;
-  const faceoffDotR = 1;
   const cornerR = 28; // rounded corner radius
 
   function rinkBg() {
-    // Surface with rounded corners
     return `<rect class="rink-surface" x="${M}" y="${M}" width="${RINK_LEN}" height="${RINK_WID}" rx="${cornerR}" ry="${cornerR}" />`;
   }
   function rinkBoards() {
@@ -2472,7 +2481,6 @@ function drawRink(shots, game) {
     ).join("") +
       `<circle class="rink-faceoff-dot" cx="${sx(0)}" cy="${sy(0)}" r="1.5" />` +
       spots.map(p => `<circle class="rink-faceoff-dot" cx="${sx(p.x)}" cy="${sy(p.y)}" r="1" />`).join("") +
-      // Neutral zone dots
       [{x:-20,y:22},{x:-20,y:-22},{x:20,y:22},{x:20,y:-22}].map(p =>
         `<circle class="rink-faceoff-dot" cx="${sx(p.x)}" cy="${sy(p.y)}" r="1" />`
       ).join("");
@@ -2492,21 +2500,20 @@ function drawRink(shots, game) {
 
   // Color shots: goals stand out, saves are mid, misses faded
   function dotColor(s, isFirstTeam) {
-    if (s.kind === "goal") return "#fbbf24";       // gold
-    if (s.kind === "miss") return "#7d7a86";       // grey
-    // Saved/blocked: tint by team if we have one
-    if (isFirstTeam) return "#a78bfa";             // lavender (accent-glow)
-    return "#6ee7a8";                              // mint
+    if (s.kind === "goal") return "#fbbf24";
+    if (s.kind === "miss") return "#7d7a86";
+    if (isFirstTeam) return "#a78bfa";
+    return "#6ee7a8";
   }
 
-  // Decide which team is "first" for coloring saves (uses alphabetical order)
+  // Pick the "first team" for coloring (alphabetical)
   const teamsInGame = [...new Set(filtered.map(s => s.team).filter(Boolean))].sort();
   const firstTeam = teamsInGame[0];
 
-  // Draw dots, goals last so they're on top
+  // Draw dots — goals last so they're on top
   const sorted = filtered.slice().sort((a,b) => (a.kind === "goal" ? 1 : 0) - (b.kind === "goal" ? 1 : 0));
   const dots = sorted.map((s, i) => {
-    const cx = sx(s.x), cy = sy(s.y);
+    const cx = apiX(s.x), cy = apiY(s.y);
     const r = s.kind === "goal" ? 2.6 : 1.8;
     const color = dotColor(s, s.team === firstTeam);
     return `<circle class="shot-dot ${s.kind}" cx="${cx}" cy="${cy}" r="${r}" fill="${color}" data-i="${i}" />`;
@@ -2533,9 +2540,13 @@ function drawRink(shots, game) {
   container.querySelectorAll(".shot-dot").forEach(node => {
     node.addEventListener("mouseenter", e => {
       const s = sorted[Number(node.dataset.i)];
+      const kindLabel = s.kind === "goal" ? "GOAL"
+                      : s.kind === "miss" ? "MISSED SHOT"
+                      : s.kind === "block" ? "BLOCKED SHOT"
+                      : "SHOT ON GOAL";
       tip.innerHTML = `
         <div class="tip-title">${s.shooter || "Unknown shooter"}</div>
-        <div>${s.kind.toUpperCase()}${s.team ? " · " + s.team : ""}</div>
+        <div>${kindLabel}${s.team ? " · " + s.team : ""}</div>
         <div class="tip-meta">P${s.period}${s.time ? " · " + s.time : ""}${s.goalie ? " · vs " + s.goalie : ""}</div>
       `;
       tip.classList.add("visible");
